@@ -264,6 +264,7 @@
 		"stroke-description-.": "Silent stroke",
 		"stroke-description-wh": "Whistle",
 		"stroke-description-wh2": "Long whistle",
+		"stroke-description-whistle-in": "Whistle-in cue (single long blast)",
 		"stroke-description-s": "Soft flare",
 		"time-with-triplets": "{{time}} with triplets",
 		"time-with-quintuplets": "{{time}} with quintuplets",
