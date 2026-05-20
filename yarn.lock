@@ -1780,17 +1780,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"beatbox.js@npm:^5.0.0":
-  version: 5.0.0
-  resolution: "beatbox.js@npm:5.0.0"
-  dependencies:
-    "@types/events": "npm:^3.0.3"
-    events: "npm:^3.3.0"
-  checksum: 10/a515ef9e99bb775b637470c991770b947eed18936b3d07daedc2cc7539a8e00e7fc31c52f466ae71cc6ce898b941dac6ff548faffd4ad7fa94683ba5f998ec3c
-  languageName: node
-  linkType: hard
-
-"beatbox.js@npm:^5.0.1":
+"beatbox.js@npm:5.0.1":
   version: 5.0.1
   resolution: "beatbox.js@npm:5.0.1"
   dependencies:
