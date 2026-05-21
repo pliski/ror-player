@@ -64,3 +64,56 @@ test("matchHits: extra detection beyond window", () => {
   expect(r.misses).toEqual(e);
   expect(r.extras).toEqual(d);
 });
+
+test("matchHits: two adjacent detections compete for one expected", () => {
+  // expected at t=100, detections at 90 and 110 → 110 wins because |10|>|10|... actually both
+  // are equidistant. We accept either, but in our greedy form the first one (t=90) wins.
+  const e = [{ strokeIdx: 0, t: 100 }];
+  const d = [{ t: 90, energy: 0.5 }, { t: 110, energy: 0.5 }];
+  const r = matchHits(d, e, 200);
+  expect(r.matched).toHaveLength(1);
+  expect(r.matched[0].d.t).toBe(90);
+  expect(r.extras).toHaveLength(1);
+  expect(r.extras[0].t).toBe(110);
+});
+
+test("matchHits: detection prefers closer next-expected over current", () => {
+  // detected at t=150, expected at t=100 (Δ=50) and t=200 (Δ=-50). Both within window.
+  // We're walking forward, so we match d with the first expected (100, Δ=+50) and the
+  // second expected becomes a miss.
+  const e = [{ strokeIdx: 0, t: 100 }, { strokeIdx: 1, t: 200 }];
+  const d = [{ t: 150, energy: 0.5 }];
+  const r = matchHits(d, e, 200);
+  expect(r.matched).toHaveLength(1);
+  expect(r.matched[0].e.t).toBe(100);
+  expect(r.misses).toHaveLength(1);
+  expect(r.misses[0].t).toBe(200);
+});
+
+test("matchHits: perfect 4-beat run", () => {
+  const e = Array.from({ length: 4 }, (_, i) => ({ strokeIdx: i, t: i * 125 }));
+  const d = Array.from({ length: 4 }, (_, i) => ({ t: i * 125, energy: 0.5 }));
+  const r = matchHits(d, e, 200);
+  expect(r.matched).toHaveLength(4);
+  expect(r.misses).toHaveLength(0);
+  expect(r.extras).toHaveLength(0);
+  expect(r.matched.every((m) => m.verdict === "good")).toBe(true);
+});
+
+test("matchHits: consistently 80ms late → all 'off'", () => {
+  const e = Array.from({ length: 4 }, (_, i) => ({ strokeIdx: i, t: i * 125 }));
+  const d = e.map((h) => ({ t: h.t + 80, energy: 0.5 }));
+  const r = matchHits(d, e, 200);
+  expect(r.matched).toHaveLength(4);
+  expect(r.matched.every((m) => m.verdict === "off")).toBe(true);
+  expect(r.matched.every((m) => m.delta === 80)).toBe(true);
+});
+
+test("matchHits: extra detection before all expected", () => {
+  const e = [{ strokeIdx: 0, t: 500 }];
+  const d = [{ t: 100, energy: 0.5 }];
+  const r = matchHits(d, e, 200);
+  expect(r.matched).toEqual([]);
+  expect(r.misses).toEqual(e);
+  expect(r.extras).toEqual(d);
+});
