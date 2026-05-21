@@ -252,6 +252,18 @@
 		},
 		"settings": {
 			"title": "Settings"
+		},
+		"calibration": {
+			"title": "Calibrate latency",
+			"idle-instructions": "Press Start, then tap on every beat for 4 bars.",
+			"running-instructions": "Tap or press any key on every beat.",
+			"tap-target": "TAP HERE",
+			"result-median": "Median offset: {{median}} ms",
+			"result-spread": "Spread: {{spread}} ms",
+			"spread-warning": "High spread — try again.",
+			"cancel": "Cancel",
+			"start": "Start",
+			"apply": "Apply {{median}} ms"
 		}
 	},
 	"pattern-list-filter": {

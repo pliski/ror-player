@@ -10,6 +10,7 @@
 	import type { TrainerMode, TrainerState } from "../../services/trainerEngine";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
+	import CalibrationWizard from "./calibration-wizard.vue";
 	import TrainerPartition from "./trainer-partition.vue";
 	import TrainerScoreRail from "./trainer-score-rail.vue";
 	import TrainerToolbar from "./trainer-toolbar.vue";
@@ -66,6 +67,7 @@
 	const mode = ref<TrainerMode>("instrument");
 	const trainerState = ref<TrainerState>("idle");
 	const latencyMs = ref(0);
+	const calibrationOpen = ref(false);
 
 	const currentPattern = computed(() => tuneName.value && patternName.value
 		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
@@ -73,7 +75,8 @@
 
 	function handleStart() {}
 	function handleStop() {}
-	function handleCalibrate() {}
+	function handleCalibrate() { calibrationOpen.value = true; }
+	function applyCalibration(offsetMs: number) { latencyMs.value = offsetMs; }
 </script>
 
 <template>
@@ -104,6 +107,13 @@
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
 		</div>
+
+		<CalibrationWizard
+			:open="calibrationOpen"
+			@update:open="calibrationOpen = $event"
+			:speedBpm="currentPattern?.speed ?? 100"
+			@apply="applyCalibration"
+		/>
 	</div>
 </template>
 
