@@ -1,6 +1,38 @@
 import { expect, test, vi } from "vitest";
-import { createTrainerEngine } from "../trainerEngine";
+import { createTrainerEngine, TrainerEngineOpts } from "../trainerEngine";
 import { normalizePattern } from "../../state/pattern";
+import type Beatbox from "beatbox.js";
+import type { BeatboxReference } from "../player";
+
+// Prevent player.ts module-level AudioContext side-effects from running in happy-dom.
+// patternToBeatbox is replaced with a no-op stub; createBeatbox/getPlayerById are
+// never called directly in tests since all tests inject beatboxFactory.
+vi.mock("../player", () => ({
+  createBeatbox: vi.fn(),
+  getPlayerById: vi.fn(),
+  patternToBeatbox: vi.fn(() => []),
+  stopAllPlayers: vi.fn(),
+}));
+
+function makeFakeBeatbox(): { ref: BeatboxReference; player: Beatbox } {
+  const player = {
+    setPattern: vi.fn(),
+    setBeatLength: vi.fn(),
+    setRepeat: vi.fn(),
+    on: vi.fn(),
+    play: vi.fn(),
+    stop: vi.fn(),
+    getPosition: vi.fn(() => 0),
+  } as unknown as Beatbox;
+  const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
+  return { ref, player };
+}
+
+function makeDefaultOpts(): TrainerEngineOpts {
+  return {
+    beatboxFactory: () => makeFakeBeatbox(),
+  };
+}
 
 test("engine starts in Idle", () => {
   const engine = createTrainerEngine({
@@ -39,7 +71,7 @@ function makeDefaultConfig() {
 
 test("start() transitions to requestingMic then countIn on grant", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   const promise = engine.start();
   expect(engine.state.value).toBe("requestingMic");
@@ -50,7 +82,7 @@ test("start() transitions to requestingMic then countIn on grant", async () => {
 
 test("start() denied returns to idle", async () => {
   const deps = makeDeps(false);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start().catch(() => {});
   expect(engine.state.value).toBe("idle");
@@ -58,7 +90,7 @@ test("start() denied returns to idle", async () => {
 
 test("stop() resets to idle and cleans up", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.stop();
@@ -69,7 +101,7 @@ test("stop() resets to idle and cleans up", async () => {
 
 test("start() is a no-op when not idle or results", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start(); // → countIn
   expect(engine.state.value).toBe("countIn");
@@ -84,7 +116,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
     setTimeout: (cb: () => void, _ms: number) => { queueMicrotask(cb); return 0 as any; },
     clearTimeout: () => {},
   };
-  const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  const engine = createTrainerEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
   engine.configure(makeDefaultConfig());
   await engine.start();
   expect(engine.state.value).toBe("countIn");
@@ -94,7 +126,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
 
 test("stopGame() transitions from gameOn through finalising to results", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
@@ -112,7 +144,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
     },
     clearTimeout: () => {},
   };
-  const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  const engine = createTrainerEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
@@ -125,7 +157,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
 
 test("advanceToGameOn() is a no-op from non-countIn states", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   // From idle — should not transition
   await engine.advanceToGameOn();
@@ -146,12 +178,13 @@ test("engine pipes detected hits into the scorer after gameOn", async () => {
 
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
 
-  const engine = createTrainerEngine(deps);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
 
-  // For this task we don't yet have Beatbox integration (lands in Task 6.5).
-  // Inject an explicit loop baseline so the engine can score onsets.
+  // The fake Beatbox's "stop" handler is a vi.fn() — registered but never invoked.
+  // So onCountInComplete never fires and the main Beatbox isn't created.
+  // Inject an explicit loop baseline directly to drive the scorer.
   const baselinePerf = 1000; // arbitrary
   await engine.advanceToGameOn(baselinePerf);
 
