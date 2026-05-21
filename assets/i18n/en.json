@@ -238,6 +238,13 @@
 		"mic": {
 			"listening": "listening",
 			"stopped": "stopped"
+		},
+		"toolbar": {
+			"start": "Start",
+			"stop": "Stop",
+			"instrument": "Instrument",
+			"modeInstrument": "Instrument",
+			"modeBand": "Band"
 		}
 	},
 	"pattern-list-filter": {

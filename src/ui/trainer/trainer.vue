@@ -1,15 +1,18 @@
 <script setup lang="ts">
 	import { ref, computed, TeleportProps, watch } from "vue";
-	import { normalizeState } from "../../state/state";
+	import { normalizeState, getPatternFromState } from "../../state/state";
 	import { provideState } from "../../services/state";
 	import { useRefWithOverride } from "../../utils";
 	import { useI18n } from "../../services/i18n";
 	import { getTuneOfTheYear } from "../../services/utils";
 	import { stopAllPlayers } from "../../services/player";
+	import { Instrument } from "../../config";
+	import type { TrainerMode, TrainerState } from "../../services/trainerEngine";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import TrainerPartition from "./trainer-partition.vue";
 	import TrainerScoreRail from "./trainer-score-rail.vue";
+	import TrainerToolbar from "./trainer-toolbar.vue";
 
 	const props = defineProps<{
 		tuneName?: string;
@@ -58,6 +61,17 @@
 		hits: 0, misses: 0, extras: 0, expectedTotal: 0,
 		meanAbsDelta: 0, drift: 0, headlineScore: 100,
 	}));
+
+	const instrument = ref<Instrument>("sn");
+	const mode = ref<TrainerMode>("instrument");
+	const trainerState = ref<TrainerState>("idle");
+
+	const currentPattern = computed(() => tuneName.value && patternName.value
+		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
+		: undefined);
+
+	function handleStart() {}
+	function handleStop() {}
 </script>
 
 <template>
@@ -74,13 +88,14 @@
 		<div class="bb-trainer-main">
 			<TrainerScoreRail :stats="dummyStats" :micActive="false" :latencyMs="0" v-if="tuneName && patternName" />
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
-				<div class="bb-trainer-controls p-2 d-flex align-items-center gap-2">
-					<h4 class="mb-0 flex-grow-1">{{ tune?.displayName ?? tuneName }} · {{ patternName }}</h4>
-					<label class="form-label visually-hidden" for="bb-trainer-pattern-select">{{ i18n.t("trainer.pattern-label") }}</label>
-					<select id="bb-trainer-pattern-select" class="form-select" v-model="patternName">
-						<option v-for="k in patternKeys" :key="k" :value="k">{{ k }}</option>
-					</select>
-				</div>
+				<TrainerToolbar
+					:pattern="currentPattern"
+					v-model:instrument="instrument"
+					v-model:mode="mode"
+					:state="trainerState"
+					@start="handleStart"
+					@stop="handleStop"
+				/>
 				<TrainerPartition :tuneName="tuneName" :patternName="patternName" />
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
@@ -104,10 +119,6 @@
 				flex-direction: column;
 			}
 
-			.form-select {
-				max-width: 240px;
-			}
-
 			.bb-trainer-pane {
 				flex-grow: 1;
 				display: flex;
@@ -115,10 +126,6 @@
 				min-height: 0;
 				overflow: auto;
 				order: 1;
-
-				.bb-trainer-controls {
-					flex-shrink: 0;
-				}
 			}
 		}
 	}
