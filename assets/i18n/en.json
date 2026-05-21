@@ -225,7 +225,6 @@
 		"trainer": "Train"
 	},
 	"trainer": {
-		"scaffold-note": "More controls coming soon.",
 		"pattern-label": "Pattern",
 		"pick-tune": "Pick a tune from the sidebar to start training."
 	},

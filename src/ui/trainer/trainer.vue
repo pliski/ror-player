@@ -8,6 +8,7 @@
 	import { stopAllPlayers } from "../../services/player";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
+	import TrainerPartition from "./trainer-partition.vue";
 
 	const props = defineProps<{
 		tuneName?: string;
@@ -65,15 +66,15 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<div v-if="tuneName && patternName" class="p-3">
-				<h4>{{ tune?.displayName ?? tuneName }} · {{ patternName }}</h4>
-				<p class="text-muted">{{ i18n.t("trainer.scaffold-note") }}</p>
-				<div class="mb-3">
-					<label class="form-label" for="bb-trainer-pattern-select">{{ i18n.t("trainer.pattern-label") }}</label>
+			<div v-if="tuneName && patternName" class="bb-trainer-content">
+				<div class="bb-trainer-controls p-2 d-flex align-items-center gap-2">
+					<h4 class="mb-0 flex-grow-1">{{ tune?.displayName ?? tuneName }} · {{ patternName }}</h4>
+					<label class="form-label visually-hidden" for="bb-trainer-pattern-select">{{ i18n.t("trainer.pattern-label") }}</label>
 					<select id="bb-trainer-pattern-select" class="form-select" v-model="patternName">
 						<option v-for="k in patternKeys" :key="k" :value="k">{{ k }}</option>
 					</select>
 				</div>
+				<TrainerPartition :tuneName="tuneName" :patternName="patternName" />
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
 		</div>
@@ -94,6 +95,15 @@
 			.form-select {
 				max-width: 240px;
 			}
+		}
+
+		.bb-trainer-content {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.bb-trainer-controls {
+			flex-shrink: 0;
 		}
 	}
 </style>
