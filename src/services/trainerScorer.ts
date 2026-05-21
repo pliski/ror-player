@@ -116,3 +116,29 @@ export function matchHits(
 
   return { matched, misses, extras };
 }
+
+export function scoreSession(
+  match: MatchResult,
+  tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
+): SessionStats {
+  const hits = match.matched.length;
+  const misses = match.misses.length;
+  const extras = match.extras.length;
+  const expectedTotal = hits + misses;
+
+  const meanAbsDelta = hits === 0
+    ? 0
+    : match.matched.reduce((s, m) => s + Math.abs(m.delta), 0) / hits;
+  const drift = hits === 0
+    ? 0
+    : match.matched.reduce((s, m) => s + m.delta, 0) / hits;
+
+  const hitRatio = expectedTotal === 0 ? 1 : hits / expectedTotal;
+  const timingTightness = Math.max(0, Math.min(1, 1 - meanAbsDelta / tolerance.off));
+  const headlineScore = Math.round(60 * hitRatio + 40 * timingTightness);
+
+  return {
+    hits, misses, extras, expectedTotal,
+    meanAbsDelta, drift, headlineScore,
+  };
+}

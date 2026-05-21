@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE } from "../trainerScorer";
+import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession } from "../trainerScorer";
 import { normalizePattern } from "../../state/pattern";
 
 test("SILENT_STROKES matches the documented set", () => {
@@ -116,4 +116,55 @@ test("matchHits: extra detection before all expected", () => {
   expect(r.matched).toEqual([]);
   expect(r.misses).toEqual(e);
   expect(r.extras).toEqual(d);
+});
+
+test("scoreSession: empty session", () => {
+  const s = scoreSession({ matched: [], misses: [], extras: [] });
+  expect(s).toEqual({
+    hits: 0, misses: 0, extras: 0, expectedTotal: 0,
+    meanAbsDelta: 0, drift: 0, headlineScore: 100,
+  });
+});
+
+test("scoreSession: perfect 4-beat run → 100", () => {
+  const matched = [0, 1, 2, 3].map((i) => ({
+    d: { t: i * 125, energy: 0.5 },
+    e: { strokeIdx: i, t: i * 125 },
+    delta: 0,
+    verdict: "good" as const,
+  }));
+  const s = scoreSession({ matched, misses: [], extras: [] });
+  expect(s.headlineScore).toBe(100);
+  expect(s.meanAbsDelta).toBe(0);
+  expect(s.drift).toBe(0);
+  expect(s.hits).toBe(4);
+});
+
+test("scoreSession: half-missed run", () => {
+  const matched = [0, 1].map((i) => ({
+    d: { t: i * 125, energy: 0.5 },
+    e: { strokeIdx: i, t: i * 125 },
+    delta: 0,
+    verdict: "good" as const,
+  }));
+  const misses = [{ strokeIdx: 2, t: 250 }, { strokeIdx: 3, t: 375 }];
+  const s = scoreSession({ matched, misses, extras: [] });
+  expect(s.hits).toBe(2);
+  expect(s.misses).toBe(2);
+  expect(s.expectedTotal).toBe(4);
+  // 60 * 0.5 + 40 * 1.0 = 70
+  expect(s.headlineScore).toBe(70);
+});
+
+test("scoreSession: all-late drift indicator", () => {
+  const matched = [0, 1, 2, 3].map((i) => ({
+    d: { t: i * 125 + 30, energy: 0.5 },
+    e: { strokeIdx: i, t: i * 125 },
+    delta: 30,
+    verdict: "good" as const,
+  }));
+  const s = scoreSession({ matched, misses: [], extras: [] });
+  // all deltas are +30 → drift = meanAbsDelta = 30
+  expect(s.drift).toBe(30);
+  expect(s.meanAbsDelta).toBe(30);
 });
