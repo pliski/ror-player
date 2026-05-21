@@ -34,6 +34,10 @@
 
 <style lang="scss">
 	.bb-trainer-partition {
+		.bb-pattern-editor-toolbar {
+			display: none;
+		}
+
 		.stroke {
 			&.verdict-good { background-color: color-mix(in srgb, var(--bs-success) 15%, transparent); }
 			&.verdict-off  { background-color: color-mix(in srgb, var(--bs-warning) 15%, transparent); }
