@@ -245,6 +245,13 @@
 			"instrument": "Instrument",
 			"modeInstrument": "Instrument",
 			"modeBand": "Band"
+		},
+		"latency": {
+			"label": "Latency offset",
+			"calibrate": "Calibrate…"
+		},
+		"settings": {
+			"title": "Settings"
 		}
 	},
 	"pattern-list-filter": {

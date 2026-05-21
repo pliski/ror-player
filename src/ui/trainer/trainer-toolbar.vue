@@ -5,19 +5,24 @@
 	import { Pattern } from "../../state/pattern";
 	import { SILENT_STROKES } from "../../services/trainerScorer";
 	import { TrainerState, TrainerMode } from "../../services/trainerEngine";
+	import HybridPopoverButton from "../utils/hybrid-popover-button.vue";
+	import LatencySlider from "./latency-slider.vue";
 
 	const props = defineProps<{
 		pattern: Pattern | undefined;
 		instrument: Instrument;
 		mode: TrainerMode;
 		state: TrainerState;
+		latencyMs: number;
 	}>();
 
 	const emit = defineEmits<{
 		"update:instrument": [v: Instrument];
 		"update:mode": [v: TrainerMode];
+		"update:latencyMs": [v: number];
 		"start": [];
 		"stop": [];
+		"calibrate": [];
 	}>();
 
 	const i18n = useI18n();
@@ -64,6 +69,11 @@
 			<input type="radio" class="btn-check" id="mode-band" :checked="mode === 'band'" @change="emit('update:mode', 'band')">
 			<label class="btn btn-outline-secondary btn-sm" for="mode-band">{{ i18n.t("trainer.toolbar.modeBand") }}</label>
 		</div>
+
+		<HybridPopoverButton variant="secondary" :title="i18n.t('trainer.settings.title')">
+			<template #button><fa icon="cog" /></template>
+			<LatencySlider :modelValue="latencyMs" @update:modelValue="emit('update:latencyMs', $event)" @calibrate="emit('calibrate')" />
+		</HybridPopoverButton>
 	</div>
 </template>
 

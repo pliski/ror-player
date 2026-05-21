@@ -65,6 +65,7 @@
 	const instrument = ref<Instrument>("sn");
 	const mode = ref<TrainerMode>("instrument");
 	const trainerState = ref<TrainerState>("idle");
+	const latencyMs = ref(0);
 
 	const currentPattern = computed(() => tuneName.value && patternName.value
 		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
@@ -72,6 +73,7 @@
 
 	function handleStart() {}
 	function handleStop() {}
+	function handleCalibrate() {}
 </script>
 
 <template>
@@ -92,9 +94,11 @@
 					:pattern="currentPattern"
 					v-model:instrument="instrument"
 					v-model:mode="mode"
+					v-model:latencyMs="latencyMs"
 					:state="trainerState"
 					@start="handleStart"
 					@stop="handleStop"
+					@calibrate="handleCalibrate"
 				/>
 				<TrainerPartition :tuneName="tuneName" :patternName="patternName" />
 			</div>
