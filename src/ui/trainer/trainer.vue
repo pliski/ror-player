@@ -102,6 +102,24 @@
 		}
 	}, { immediate: true });
 
+	watch([instrument, mode, tuneName, patternName, latencyMs], () => {
+		settings.value = {
+			...settings.value,
+			lastInstrument: instrument.value,
+			lastMode: mode.value,
+			lastTuneName: tuneName.value,
+			lastPatternName: patternName.value,
+			latencyOffsetMs: latencyMs.value,
+		};
+	}, { deep: false });
+
+	const s = settings.value;
+	if (!props.tuneName && s.lastTuneName) tuneName.value = s.lastTuneName;
+	if (!props.patternName && s.lastPatternName) patternName.value = s.lastPatternName;
+	if (s.lastInstrument) instrument.value = s.lastInstrument;
+	mode.value = s.lastMode;
+	latencyMs.value = s.latencyOffsetMs;
+
 	async function handleStart() {
 		if (mode.value === "band" && !settings.value.headphonesWarningAcked) {
 			headphonesOpen.value = true;
