@@ -71,7 +71,13 @@ function buildCountInPattern(speedBpm: number) {
 export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngineOpts = {}): TrainerEngine {
   const state = ref<TrainerState>("idle");
   const finaliseDelayMs = opts.finaliseDelayMs ?? 500;
-  const timer = opts.timer ?? { setTimeout, clearTimeout };
+  // Thunked to keep the window-method `this` binding — Firefox throws
+  // "called on an object that does not implement interface Window" if these
+  // globals are invoked as methods of a plain object.
+  const timer = opts.timer ?? {
+    setTimeout: (cb: () => void, ms: number) => window.setTimeout(cb, ms),
+    clearTimeout: (id: number) => window.clearTimeout(id),
+  };
   const events: Emitter<TrainerEngineEvents> = mitt();
   let activeStream: MediaStream | null = null;
 
