@@ -21,3 +21,30 @@ export function computeMedianAndSpread(values: number[]): MedianStats {
 
   return { median, spread: mad, count: values.length };
 }
+
+export interface CalibrationSession {
+  recordTap(timestampMs: number): void;
+  finalize(): MedianStats;
+}
+
+export function createCalibrationSession(
+  beats: number[],
+  opts: { windowMs?: number } = {},
+): CalibrationSession {
+  const windowMs = opts.windowMs ?? 300;
+  const deltas: number[] = [];
+  return {
+    recordTap(t) {
+      let bestAbs = Infinity;
+      let bestDelta = 0;
+      for (const b of beats) {
+        const d = t - b;
+        if (Math.abs(d) < bestAbs) { bestAbs = Math.abs(d); bestDelta = d; }
+      }
+      if (bestAbs <= windowMs) deltas.push(bestDelta);
+    },
+    finalize() {
+      return computeMedianAndSpread(deltas);
+    },
+  };
+}
