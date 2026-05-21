@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createTrainerEngine } from "../trainerEngine";
+import { normalizePattern } from "../../state/pattern";
 
 test("engine starts in Idle", () => {
   const engine = createTrainerEngine({
@@ -27,9 +28,19 @@ function makeDeps(grant = true) {
   };
 }
 
+function makeDefaultConfig() {
+  return {
+    pattern: normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] }),
+    instrument: "sn" as const,
+    speedBpm: 120,
+    mode: "instrument" as const,
+  };
+}
+
 test("start() transitions to requestingMic then countIn on grant", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   const promise = engine.start();
   expect(engine.state.value).toBe("requestingMic");
   await promise;
@@ -40,6 +51,7 @@ test("start() transitions to requestingMic then countIn on grant", async () => {
 test("start() denied returns to idle", async () => {
   const deps = makeDeps(false);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   await engine.start().catch(() => {});
   expect(engine.state.value).toBe("idle");
 });
@@ -47,6 +59,7 @@ test("start() denied returns to idle", async () => {
 test("stop() resets to idle and cleans up", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.stop();
   expect(engine.state.value).toBe("idle");
@@ -57,6 +70,7 @@ test("stop() resets to idle and cleans up", async () => {
 test("start() is a no-op when not idle or results", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   await engine.start(); // → countIn
   expect(engine.state.value).toBe("countIn");
   await engine.start(); // guard should early-return
@@ -71,6 +85,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
     clearTimeout: () => {},
   };
   const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  engine.configure(makeDefaultConfig());
   await engine.start();
   expect(engine.state.value).toBe("countIn");
   await engine.advanceToGameOn();
@@ -80,6 +95,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
 test("stopGame() transitions from gameOn through finalising to results", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
   await engine.stopGame();
@@ -97,6 +113,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
     clearTimeout: () => {},
   };
   const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
   const stopGamePromise = engine.stopGame(); // enters finalising, awaits delay
@@ -109,6 +126,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
 test("advanceToGameOn() is a no-op from non-countIn states", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps);
+  engine.configure(makeDefaultConfig());
   // From idle — should not transition
   await engine.advanceToGameOn();
   expect(engine.state.value).toBe("idle");
@@ -118,4 +136,29 @@ test("advanceToGameOn() is a no-op from non-countIn states", async () => {
   expect(engine.state.value).toBe("gameOn");
   await engine.advanceToGameOn();           // second call from gameOn
   expect(engine.state.value).toBe("gameOn"); // unchanged
+});
+
+test("engine pipes detected hits into the scorer after gameOn", async () => {
+  const deps = makeDeps(true);
+  // Capture the onset subscriber to drive it manually
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
+
+  const engine = createTrainerEngine(deps);
+  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
+  await engine.start();
+
+  // For this task we don't yet have Beatbox integration (lands in Task 6.5).
+  // Inject an explicit loop baseline so the engine can score onsets.
+  const baselinePerf = 1000; // arbitrary
+  await engine.advanceToGameOn(baselinePerf);
+
+  // Strokes are at t=0 and t=250ms in loop-relative time (120 bpm × 4 strokes/beat → 125ms/stroke).
+  // Send an onset at baseline + 250ms — should land on the second expected hit.
+  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
+
+  await engine.stopGame();
+  expect(engine.stats().hits).toBeGreaterThanOrEqual(1);
 });
