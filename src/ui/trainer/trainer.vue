@@ -127,7 +127,7 @@
 	latencyMs.value = s.latencyOffsetMs;
 
 	async function handleStart() {
-		if (mode.value === "band" && !settings.value.headphonesWarningAcked) {
+		if (!settings.value.headphonesWarningAcked) {
 			headphonesOpen.value = true;
 			return;
 		}

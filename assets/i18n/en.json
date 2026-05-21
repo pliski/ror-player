@@ -277,7 +277,7 @@
 		},
 		"headphones": {
 			"title": "Headphones recommended",
-			"body": "For accurate scoring in band mode, use headphones — otherwise the app will hear the playback, not just you.",
+			"body": "For accurate scoring, please use headphones — otherwise the microphone will hear the playback, not just you.",
 			"continue": "Continue"
 		}
 	},
