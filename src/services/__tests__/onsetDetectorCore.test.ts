@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { rmsOfBlock, createDetectorState, processBlock } from "../onsetDetectorCore";
+import { rmsOfBlock, createDetectorState, processBlock, MIN_NOISE_FLOOR } from "../onsetDetectorCore";
 
 test("rmsOfBlock: silent block", () => {
   expect(rmsOfBlock(new Float32Array(128))).toBe(0);
@@ -49,4 +49,18 @@ test("processBlock: respects noiseFloorInit", () => {
   const state = createDetectorState({ multiplier: 3, refractoryFrames: 5, noiseFloorInit: 1.0 });
   const moderate = new Float32Array(128).fill(0.1);
   expect(processBlock(state, moderate, 0)).toBeNull();
+});
+
+test("createDetectorState: initial floor below MIN_NOISE_FLOOR is bumped up", () => {
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5, noiseFloorInit: 0.0001 });
+  expect(state.noiseFloor).toBe(MIN_NOISE_FLOOR);
+});
+
+test("processBlock: adaptive floor stays clamped at MIN_NOISE_FLOOR under prolonged silence", () => {
+  // Start the floor above the clamp; let it decay against very quiet input. Without the clamp
+  // it would settle near the input RMS (~0.0001); with the clamp it should park at MIN_NOISE_FLOOR.
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5, noiseFloorInit: 0.1 });
+  const silent = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 10000; i++) processBlock(state, silent, i);
+  expect(state.noiseFloor).toBe(MIN_NOISE_FLOOR);
 });

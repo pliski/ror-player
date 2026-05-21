@@ -17,6 +17,13 @@ export interface OnsetEvent {
   energy: number;
 }
 
+// Minimum value the adaptive noise floor can decay to. Without this clamp the
+// floor adapts down to ambient room RMS (~0.001) and the trigger threshold
+// drops with it, firing on breathing/fan noise. Empirically chosen so the
+// threshold (floor × multiplier) lands cleanly between observed ambient peaks
+// (≤0.034) and the softest real percussion hits (≥0.05).
+export const MIN_NOISE_FLOOR = 0.015;
+
 export function rmsOfBlock(block: Float32Array): number {
   if (block.length === 0) return 0;
   let sumSq = 0;
@@ -27,7 +34,7 @@ export function rmsOfBlock(block: Float32Array): number {
 export function createDetectorState(params: DetectorParams): DetectorState {
   return {
     params,
-    noiseFloor: params.noiseFloorInit ?? 0.001,
+    noiseFloor: Math.max(MIN_NOISE_FLOOR, params.noiseFloorInit ?? 0.001),
     lastFireFrame: -Infinity,
   };
 }
@@ -45,7 +52,10 @@ export function processBlock(
 
   // Adaptive floor: only learn when block is below 4× current floor
   if (rms < state.noiseFloor * 4) {
-    state.noiseFloor = state.noiseFloor * 0.995 + rms * 0.005;
+    state.noiseFloor = Math.max(
+      MIN_NOISE_FLOOR,
+      state.noiseFloor * 0.995 + rms * 0.005,
+    );
   }
 
   const exceeds = rms > state.noiseFloor * state.params.multiplier;
