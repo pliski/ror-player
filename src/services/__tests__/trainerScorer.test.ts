@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession } from "../trainerScorer";
+import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer } from "../trainerScorer";
 import { normalizePattern } from "../../state/pattern";
 
 test("SILENT_STROKES matches the documented set", () => {
@@ -167,4 +167,69 @@ test("scoreSession: all-late drift indicator", () => {
   // all deltas are +30 → drift = meanAbsDelta = 30
   expect(s.drift).toBe(30);
   expect(s.meanAbsDelta).toBe(30);
+});
+
+test("createScorer accumulates hits across a single loop", () => {
+  const timeline = {
+    expected: [
+      { strokeIdx: 0, t: 0 },
+      { strokeIdx: 1, t: 125 },
+    ],
+    loopLengthMs: 500,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  s.acceptHit({ t: 0, energy: 0.5 });
+  s.acceptHit({ t: 125, energy: 0.5 });
+  s.finalize();
+  const stats = s.stats();
+  expect(stats.hits).toBe(2);
+  expect(stats.misses).toBe(0);
+});
+
+test("createScorer resets the matcher per loop", () => {
+  const timeline = {
+    expected: [{ strokeIdx: 0, t: 0 }],
+    loopLengthMs: 500,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  s.acceptHit({ t: 0, energy: 0.5 });   // matches loop 0 stroke 0
+  s.onLoopWrap();
+  s.acceptHit({ t: 0, energy: 0.5 });   // matches loop 1 stroke 0
+  s.finalize();
+  expect(s.stats().hits).toBe(2);
+});
+
+test("createScorer trims tail when finalize(tailMs) given", () => {
+  const timeline = {
+    expected: [
+      { strokeIdx: 0, t: 0 },
+      { strokeIdx: 1, t: 1000 }, // late hit in the tail
+    ],
+    loopLengthMs: 2000,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  s.acceptHit({ t: 0, energy: 0.5 });
+  // user pressed Stop at "now = 1100", tailMs = 500 → drop expected hits in [600..1100]
+  s.finalize({ stopAtMs: 1100, tailMs: 500 });
+  // The expected at t=1000 falls in the trim window and is dropped.
+  expect(s.stats().misses).toBe(0);
+  expect(s.stats().hits).toBe(1);
+});
+
+test("createScorer stats() before finalize returns live approximation", () => {
+  const timeline = {
+    expected: [{ strokeIdx: 0, t: 0 }],
+    loopLengthMs: 500,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  s.acceptHit({ t: 0, energy: 0.5 });
+  const live = s.stats();          // pre-finalize: live path
+  expect(live.hits).toBe(1);
+  expect(live.misses).toBe(0);
+  s.finalize();
+  expect(s.stats().hits).toBe(1);  // finalize agrees
 });

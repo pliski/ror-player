@@ -142,3 +142,88 @@ export function scoreSession(
     meanAbsDelta, drift, headlineScore,
   };
 }
+
+export interface ScorerHandle {
+  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off" } | { verdict: "extra" } | null;
+  onLoopWrap(): void;
+  finalize(opts?: { stopAtMs: number; tailMs: number }): void;
+  stats(): SessionStats;
+}
+
+export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
+  // Per-loop pending matchers. We don't run matchHits() incrementally; instead we
+  // bucket detected hits per-loop and run matchHits() at finalize(). For *live*
+  // verdict emission we eagerly classify each hit against the nearest expected
+  // (best-effort; final score uses the canonical matchHits at finalize time).
+  let currentLoopDetected: DetectedHit[] = [];
+  const completedLoops: DetectedHit[][] = [];
+  let finalized = false;
+  let finalMatch: MatchResult = { matched: [], misses: [], extras: [] };
+  const windowMs = timeline.toleranceMs.off + 50;
+
+  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off" } | { verdict: "extra" } {
+    let bestI = -1;
+    let bestAbs = Infinity;
+    for (let i = 0; i < timeline.expected.length; i++) {
+      const d = Math.abs(timeline.expected[i].t - hit.t);
+      if (d < bestAbs) { bestAbs = d; bestI = i; }
+    }
+    if (bestI < 0 || bestAbs > windowMs) return { verdict: "extra" };
+    const v: Verdict = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
+    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v };
+  }
+
+  return {
+    acceptHit(hit) {
+      if (finalized) return null;
+      currentLoopDetected.push(hit);
+      return bestGuess(hit);
+    },
+    onLoopWrap() {
+      if (finalized) return;
+      completedLoops.push(currentLoopDetected);
+      currentLoopDetected = [];
+    },
+    finalize(opts) {
+      if (finalized) return;
+      finalized = true;
+
+      const trimmedExpected = opts
+        ? timeline.expected.filter((e) => !(e.t > opts.stopAtMs - opts.tailMs && e.t <= opts.stopAtMs))
+        : timeline.expected;
+      const trimmedCurrentLoop = opts
+        ? currentLoopDetected.filter((d) => !(d.t > opts.stopAtMs - opts.tailMs && d.t <= opts.stopAtMs))
+        : currentLoopDetected;
+
+      // Completed loops played to completion — match against full expected.
+      const merged: MatchResult = { matched: [], misses: [], extras: [] };
+      for (const loopDet of completedLoops) {
+        const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs);
+        merged.matched.push(...r.matched);
+        merged.misses.push(...r.misses);
+        merged.extras.push(...r.extras);
+      }
+      // Current (possibly trimmed) loop — match against trimmed expected.
+      const rFinal = matchHits(trimmedCurrentLoop, trimmedExpected, windowMs, timeline.toleranceMs);
+      merged.matched.push(...rFinal.matched);
+      merged.misses.push(...rFinal.misses);
+      merged.extras.push(...rFinal.extras);
+
+      finalMatch = merged;
+    },
+    stats() {
+      if (!finalized) {
+        // Approximate live stats by running matchHits on completed loops + current loop.
+        const merged: MatchResult = { matched: [], misses: [], extras: [] };
+        for (const loopDet of [...completedLoops, currentLoopDetected]) {
+          const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs);
+          merged.matched.push(...r.matched);
+          merged.misses.push(...r.misses);
+          merged.extras.push(...r.extras);
+        }
+        return scoreSession(merged, timeline.toleranceMs);
+      }
+      return scoreSession(finalMatch, timeline.toleranceMs);
+    },
+  };
+}
