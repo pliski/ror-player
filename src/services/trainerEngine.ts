@@ -80,7 +80,18 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     return { ref, player: getPlayerById(ref.id) };
   }
 
-  function configure(c: TrainerConfig) { cfg = c; }
+  function configure(c: TrainerConfig) {
+    const oldCfg = cfg;
+    cfg = c;
+    if (oldCfg && state.value !== "idle") {
+      const changed =
+        oldCfg.pattern !== c.pattern ||
+        oldCfg.instrument !== c.instrument ||
+        oldCfg.speedBpm !== c.speedBpm ||
+        oldCfg.mode !== c.mode;
+      if (changed) void stop();
+    }
+  }
 
   function setupScorerAndDetector() {
     if (!cfg) throw new Error("Trainer not configured");

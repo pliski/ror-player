@@ -195,3 +195,19 @@ test("engine pipes detected hits into the scorer after gameOn", async () => {
   await engine.stopGame();
   expect(engine.stats().hits).toBeGreaterThanOrEqual(1);
 });
+
+test("configure() during gameOn forces a reset to idle", async () => {
+  const deps = makeDeps(true);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure({
+    pattern: normalizePattern({ length: 1, time: 4, sn: ["X"] }),
+    instrument: "sn", speedBpm: 120, mode: "instrument",
+  });
+  await engine.start();
+  await engine.advanceToGameOn();
+  engine.configure({
+    pattern: normalizePattern({ length: 1, time: 4, sn: ["X"] }),
+    instrument: "ls", speedBpm: 120, mode: "instrument",
+  });
+  expect(engine.state.value).toBe("idle");
+});
