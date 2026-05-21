@@ -221,7 +221,11 @@
 	},
 	"overview": {
 		"listen": "Listen",
-		"compose": "Compose"
+		"compose": "Compose",
+		"trainer": "Train"
+	},
+	"trainer": {
+		"placeholder": "Trainer coming soon — pick a tune from the sidebar"
 	},
 	"pattern-list-filter": {
 		"filter-placeholder": "Filter: {{category}}"
