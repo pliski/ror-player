@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { ref, computed, TeleportProps, watch } from "vue";
+	import { ref, computed, onBeforeUnmount, TeleportProps, watch } from "vue";
 	import { normalizeState, getPatternFromState } from "../../state/state";
 	import { provideState } from "../../services/state";
 	import { useRefWithOverride } from "../../utils";
@@ -7,7 +7,10 @@
 	import { getTuneOfTheYear } from "../../services/utils";
 	import { stopAllPlayers } from "../../services/player";
 	import { Instrument } from "../../config";
-	import type { TrainerMode, TrainerState } from "../../services/trainerEngine";
+	import type { TrainerMode } from "../../services/trainerEngine";
+	import { createTrainerEngine } from "../../services/trainerEngine";
+	import { createMicPermission } from "../../services/mediaPermissions";
+	import { createOnsetDetector } from "../../services/onsetDetector";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import CalibrationWizard from "./calibration-wizard.vue";
@@ -58,14 +61,8 @@
 		}
 	}, { immediate: true });
 
-	const dummyStats = computed(() => ({
-		hits: 0, misses: 0, extras: 0, expectedTotal: 0,
-		meanAbsDelta: 0, drift: 0, headlineScore: 100,
-	}));
-
 	const instrument = ref<Instrument>("sn");
 	const mode = ref<TrainerMode>("instrument");
-	const trainerState = ref<TrainerState>("idle");
 	const latencyMs = ref(0);
 	const calibrationOpen = ref(false);
 
@@ -73,10 +70,54 @@
 		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
 		: undefined);
 
-	function handleStart() {}
-	function handleStop() {}
+	const micPermission = createMicPermission();
+	const detector = createOnsetDetector();
+	const engine = createTrainerEngine({ micPermission, detector });
+
+	const trainerState = computed(() => engine.state.value);
+
+	watch([currentPattern, instrument, mode, () => currentPattern.value?.speed], () => {
+		if (currentPattern.value && instrument.value) {
+			engine.configure({
+				pattern: currentPattern.value,
+				instrument: instrument.value,
+				speedBpm: currentPattern.value.speed,
+				mode: mode.value,
+			});
+		}
+	}, { immediate: true });
+
+	async function handleStart() {
+		try {
+			await engine.start();
+		} catch {
+			// mic denied — will surface via toast in Task 9.3
+		}
+	}
+
+	async function handleStop() {
+		await engine.stopGame();
+	}
+
 	function handleCalibrate() { calibrationOpen.value = true; }
 	function applyCalibration(offsetMs: number) { latencyMs.value = offsetMs; }
+
+	const stats = ref(engine.stats());
+	// Throttled update via interval (~10 Hz) — could use a watcher on state but stats is non-reactive
+	let statsTimer: number | null = null;
+	watch(trainerState, (s) => {
+		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+		if (s === "gameOn" || s === "countIn") {
+			statsTimer = window.setInterval(() => { stats.value = engine.stats(); }, 100);
+		} else if (s === "results") {
+			stats.value = engine.stats();
+		}
+	});
+
+	onBeforeUnmount(() => {
+		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+		void engine.stop();
+	});
 </script>
 
 <template>
@@ -91,7 +132,7 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<TrainerScoreRail :stats="dummyStats" :micActive="false" :latencyMs="0" v-if="tuneName && patternName" />
+			<TrainerScoreRail :stats="stats" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" v-if="tuneName && patternName" />
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<TrainerToolbar
 					:pattern="currentPattern"
