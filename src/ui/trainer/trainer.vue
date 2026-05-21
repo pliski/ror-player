@@ -245,6 +245,10 @@
 		flex-grow: 1;
 		min-height: 0;
 
+		.bb-tune-list {
+			flex-grow: 1;
+		}
+
 		.bb-trainer-main {
 			flex-grow: 1;
 			display: flex;
