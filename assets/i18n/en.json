@@ -226,7 +226,19 @@
 	},
 	"trainer": {
 		"pattern-label": "Pattern",
-		"pick-tune": "Pick a tune from the sidebar to start training."
+		"pick-tune": "Pick a tune from the sidebar to start training.",
+		"score": {
+			"title": "Score",
+			"avgDelta": "avg |Δ|",
+			"drift": "drift",
+			"hits": "hits",
+			"misses": "misses",
+			"extras": "extras"
+		},
+		"mic": {
+			"listening": "listening",
+			"stopped": "stopped"
+		}
 	},
 	"pattern-list-filter": {
 		"filter-placeholder": "Filter: {{category}}"

@@ -9,6 +9,7 @@
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import TrainerPartition from "./trainer-partition.vue";
+	import TrainerScoreRail from "./trainer-score-rail.vue";
 
 	const props = defineProps<{
 		tuneName?: string;
@@ -52,6 +53,11 @@
 			patternName.value = patternKeys.value[0];
 		}
 	}, { immediate: true });
+
+	const dummyStats = computed(() => ({
+		hits: 0, misses: 0, extras: 0, expectedTotal: 0,
+		meanAbsDelta: 0, drift: 0, headlineScore: 100,
+	}));
 </script>
 
 <template>
@@ -66,7 +72,8 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<div v-if="tuneName && patternName" class="bb-trainer-content">
+			<TrainerScoreRail :stats="dummyStats" :micActive="false" :latencyMs="0" v-if="tuneName && patternName" />
+			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<div class="bb-trainer-controls p-2 d-flex align-items-center gap-2">
 					<h4 class="mb-0 flex-grow-1">{{ tune?.displayName ?? tuneName }} · {{ patternName }}</h4>
 					<label class="form-label visually-hidden" for="bb-trainer-pattern-select">{{ i18n.t("trainer.pattern-label") }}</label>
@@ -89,21 +96,30 @@
 
 		.bb-trainer-main {
 			flex-grow: 1;
+			display: flex;
+			flex-direction: row;
 			min-height: 0;
-			overflow: auto;
+
+			@media (max-width: 767.98px) {
+				flex-direction: column;
+			}
 
 			.form-select {
 				max-width: 240px;
 			}
-		}
 
-		.bb-trainer-content {
-			display: flex;
-			flex-direction: column;
-		}
+			.bb-trainer-pane {
+				flex-grow: 1;
+				display: flex;
+				flex-direction: column;
+				min-height: 0;
+				overflow: auto;
+				order: 1;
 
-		.bb-trainer-controls {
-			flex-shrink: 0;
+				.bb-trainer-controls {
+					flex-shrink: 0;
+				}
+			}
 		}
 	}
 </style>
