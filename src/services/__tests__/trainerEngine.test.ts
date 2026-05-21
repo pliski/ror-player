@@ -196,6 +196,96 @@ test("engine pipes detected hits into the scorer after gameOn", async () => {
   expect(engine.stats().hits).toBeGreaterThanOrEqual(1);
 });
 
+test("engine emits 'verdict' when the scorer matches a hit", async () => {
+  const deps = makeDeps(true);
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
+  await engine.start();
+
+  const verdictSpy = vi.fn();
+  engine.on("verdict", verdictSpy);
+
+  const baselinePerf = 1000;
+  await engine.advanceToGameOn(baselinePerf);
+
+  // Hit aligned to second expected stroke (t=250ms) → "good" verdict on strokeIdx 2
+  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
+
+  expect(verdictSpy).toHaveBeenCalledTimes(1);
+  const arg = verdictSpy.mock.calls[0][0];
+  expect(typeof arg.strokeIdx).toBe("number");
+  expect(["good", "off"]).toContain(arg.verdict);
+});
+
+test("engine emits 'loopWrap' on main-player beat at position 0", async () => {
+  const deps = makeDeps(true);
+
+  // Capture handlers on each created beatbox by index.
+  const beatboxes: Array<{
+    handlers: Record<string, (() => void) | undefined>;
+    player: Beatbox;
+    ref: BeatboxReference;
+  }> = [];
+  const beatboxFactory = (_repeat: boolean) => {
+    const handlers: Record<string, (() => void) | undefined> = {};
+    const player = {
+      setPattern: vi.fn(),
+      setBeatLength: vi.fn(),
+      setRepeat: vi.fn(),
+      on: vi.fn((ev: string, cb: () => void) => { handlers[ev] = cb; }),
+      play: vi.fn(),
+      stop: vi.fn(),
+      getPosition: vi.fn(() => 0),
+    } as unknown as Beatbox;
+    const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
+    const entry = { handlers, player, ref };
+    beatboxes.push(entry);
+    return { ref, player };
+  };
+
+  const engine = createTrainerEngine(deps, { beatboxFactory });
+  engine.configure(makeDefaultConfig());
+
+  const loopWrapSpy = vi.fn();
+  engine.on("loopWrap", loopWrapSpy);
+
+  await engine.start();
+  // count-in beatbox is beatboxes[0]; trigger its "stop" → onCountInComplete builds the main beatbox
+  beatboxes[0].handlers.stop?.();
+  // Allow microtasks queued by onCountInComplete to flush
+  await Promise.resolve();
+  expect(beatboxes.length).toBeGreaterThanOrEqual(2);
+  // Simulate main player's "play" to set loopBaselinePerf, then a beat at position 0
+  beatboxes[1].handlers.play?.();
+  beatboxes[1].handlers.beat?.();
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1);
+});
+
+test("engine.off() removes the listener", async () => {
+  const deps = makeDeps(true);
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
+  await engine.start();
+
+  const spy = vi.fn();
+  engine.on("verdict", spy);
+  engine.off("verdict", spy);
+
+  const baselinePerf = 1000;
+  await engine.advanceToGameOn(baselinePerf);
+  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
+
+  expect(spy).not.toHaveBeenCalled();
+});
+
 test("configure() during gameOn forces a reset to idle", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps, makeDefaultOpts());

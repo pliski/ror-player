@@ -1,7 +1,8 @@
 import { Ref, ref } from "vue";
+import mitt, { Emitter } from "mitt";
 import { MicPermission } from "./mediaPermissions";
 import { OnsetDetector } from "./onsetDetector";
-import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats } from "./trainerScorer";
+import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict } from "./trainerScorer";
 import config, { Instrument } from "../config";
 import { Pattern, normalizePattern } from "../state/pattern";
 import type Beatbox from "beatbox.js";
@@ -37,6 +38,11 @@ export interface TrainerEngineOpts {
   latencyOffsetMs?: number;
 }
 
+export type TrainerEngineEvents = {
+  verdict: { strokeIdx: number; verdict: Verdict };
+  loopWrap: object;
+} & Record<string, unknown>;
+
 export interface TrainerEngine {
   state: Ref<TrainerState>;
   start(): Promise<void>;
@@ -46,6 +52,8 @@ export interface TrainerEngine {
   configure(c: TrainerConfig): void;
   stats(): SessionStats;
   debugLoopBaseline(): number | null;
+  on<K extends keyof TrainerEngineEvents>(ev: K, h: (e: TrainerEngineEvents[K]) => void): void;
+  off<K extends keyof TrainerEngineEvents>(ev: K, h: (e: TrainerEngineEvents[K]) => void): void;
 }
 
 function buildCountInPattern(speedBpm: number) {
@@ -64,6 +72,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
   const state = ref<TrainerState>("idle");
   const finaliseDelayMs = opts.finaliseDelayMs ?? 500;
   const timer = opts.timer ?? { setTimeout, clearTimeout };
+  const events: Emitter<TrainerEngineEvents> = mitt();
   let activeStream: MediaStream | null = null;
 
   let cfg: TrainerConfig | null = null;
@@ -105,7 +114,10 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       const loopLen = timeline.loopLengthMs;
       // Always-positive modulo (handles hits arriving before baseline)
       const tLoop = ((tRel % loopLen) + loopLen) % loopLen;
-      scorer.acceptHit({ t: tLoop, energy: e.energy });
+      const verdict = scorer.acceptHit({ t: tLoop, energy: e.energy });
+      if (verdict && "strokeIdx" in verdict) {
+        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict });
+      }
     };
     deps.detector.on("onset", onsetHandler);
   }
@@ -145,6 +157,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       if (mainPlayer.getPosition() === 0 && loopBaselinePerf !== null) {
         loopBaselinePerf = performance.now();
         scorer?.onLoopWrap();
+        events.emit("loopWrap", {});
       }
     });
     mainPlayer.play();
@@ -241,5 +254,9 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
 
   function debugLoopBaseline(): number | null { return loopBaselinePerf; }
 
-  return { state, start, stop, stopGame, advanceToGameOn, configure, stats, debugLoopBaseline };
+  return {
+    state, start, stop, stopGame, advanceToGameOn, configure, stats, debugLoopBaseline,
+    on: events.on.bind(events),
+    off: events.off.bind(events),
+  };
 }

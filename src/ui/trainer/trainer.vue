@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { ref, computed, onBeforeUnmount, TeleportProps, watch } from "vue";
+	import { ref, computed, onBeforeUnmount, onMounted, TeleportProps, watch } from "vue";
 	import { normalizeState, getPatternFromState } from "../../state/state";
 	import { provideState } from "../../services/state";
 	import { useRefWithOverride } from "../../utils";
@@ -11,6 +11,7 @@
 	import { createTrainerEngine } from "../../services/trainerEngine";
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
+	import type { Verdict } from "../../services/trainerScorer";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import CalibrationWizard from "./calibration-wizard.vue";
@@ -114,7 +115,30 @@
 		}
 	});
 
+	const verdicts = ref<Map<number, Verdict>>(new Map());
+
+	function handleVerdict(e: { strokeIdx: number; verdict: Verdict }) {
+		const next = new Map(verdicts.value);
+		next.set(e.strokeIdx, e.verdict);
+		verdicts.value = next;
+	}
+
+	function handleLoopWrap() {
+		verdicts.value = new Map();
+	}
+
+	watch(trainerState, (s, prev) => {
+		if (s === "countIn" && prev !== "countIn") verdicts.value = new Map();
+	});
+
+	onMounted(() => {
+		engine.on("verdict", handleVerdict);
+		engine.on("loopWrap", handleLoopWrap);
+	});
+
 	onBeforeUnmount(() => {
+		engine.off("verdict", handleVerdict);
+		engine.off("loopWrap", handleLoopWrap);
 		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
 		void engine.stop();
 	});
@@ -144,7 +168,7 @@
 					@stop="handleStop"
 					@calibrate="handleCalibrate"
 				/>
-				<TrainerPartition :tuneName="tuneName" :patternName="patternName" />
+				<TrainerPartition :tuneName="tuneName" :patternName="patternName" :verdicts="verdicts" />
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
 		</div>
