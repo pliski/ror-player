@@ -63,3 +63,59 @@ test("start() is a no-op when not idle or results", async () => {
   // Mic was requested only once; second start() did not re-request
   expect(deps.micPermission.request).toHaveBeenCalledTimes(1);
 });
+
+test("countIn completes and transitions to gameOn after configured ms", async () => {
+  const deps = makeDeps(true);
+  const fakeTimer = {
+    setTimeout: (cb: () => void, _ms: number) => { queueMicrotask(cb); return 0 as any; },
+    clearTimeout: () => {},
+  };
+  const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  await engine.start();
+  expect(engine.state.value).toBe("countIn");
+  await engine.advanceToGameOn();
+  expect(engine.state.value).toBe("gameOn");
+});
+
+test("stopGame() transitions from gameOn through finalising to results", async () => {
+  const deps = makeDeps(true);
+  const engine = createTrainerEngine(deps);
+  await engine.start();
+  await engine.advanceToGameOn();
+  await engine.stopGame();
+  expect(engine.state.value).toBe("results");
+});
+
+test("stop() during finalising cancels stopGame's transition to results", async () => {
+  const deps = makeDeps(true);
+  let resolveDelay!: () => void;
+  const fakeTimer = {
+    setTimeout: (cb: () => void, _ms: number) => {
+      resolveDelay = cb;
+      return 0 as any;
+    },
+    clearTimeout: () => {},
+  };
+  const engine = createTrainerEngine(deps, { timer: fakeTimer as any });
+  await engine.start();
+  await engine.advanceToGameOn();
+  const stopGamePromise = engine.stopGame(); // enters finalising, awaits delay
+  await engine.stop();                       // → idle (during finalising)
+  resolveDelay();                            // delay fires AFTER stop()
+  await stopGamePromise;
+  expect(engine.state.value).toBe("idle");   // guard prevented overwrite to "results"
+});
+
+test("advanceToGameOn() is a no-op from non-countIn states", async () => {
+  const deps = makeDeps(true);
+  const engine = createTrainerEngine(deps);
+  // From idle — should not transition
+  await engine.advanceToGameOn();
+  expect(engine.state.value).toBe("idle");
+  // After full lifecycle: idle → countIn → gameOn → already gameOn, second call no-op
+  await engine.start();
+  await engine.advanceToGameOn();
+  expect(engine.state.value).toBe("gameOn");
+  await engine.advanceToGameOn();           // second call from gameOn
+  expect(engine.state.value).toBe("gameOn"); // unchanged
+});

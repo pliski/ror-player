@@ -15,14 +15,23 @@ export interface TrainerEngineDeps {
   detector: OnsetDetector;
 }
 
+export interface TrainerEngineOpts {
+  timer?: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout };
+  finaliseDelayMs?: number;
+}
+
 export interface TrainerEngine {
   state: Ref<TrainerState>;
   start(): Promise<void>;
   stop(): Promise<void>;
+  stopGame(): Promise<void>;
+  advanceToGameOn(baselineOverride?: number): Promise<void>;
 }
 
-export function createTrainerEngine(deps: TrainerEngineDeps): TrainerEngine {
+export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngineOpts = {}): TrainerEngine {
   const state = ref<TrainerState>("idle");
+  const finaliseDelayMs = opts.finaliseDelayMs ?? 500;
+  const timer = opts.timer ?? { setTimeout, clearTimeout };
   let activeStream: MediaStream | null = null;
 
   async function start() {
@@ -50,6 +59,25 @@ export function createTrainerEngine(deps: TrainerEngineDeps): TrainerEngine {
     }
   }
 
+  async function advanceToGameOn(baselineOverride?: number) {
+    if (state.value !== "countIn") return;
+    state.value = "gameOn";
+  }
+
+  async function stopGame() {
+    if (state.value !== "gameOn" && state.value !== "countIn") return;
+    state.value = "finalising";
+    await new Promise<void>((resolve) => timer.setTimeout(resolve, finaliseDelayMs));
+    // stop() may have fired during the finalising delay
+    if ((state.value as TrainerState) === "idle") return;
+    state.value = "results";
+    if (activeStream) {
+      deps.micPermission.release(activeStream);
+      activeStream = null;
+    }
+    await deps.detector.stop();
+  }
+
   async function stop() {
     state.value = "idle";
     if (activeStream) {
@@ -59,5 +87,5 @@ export function createTrainerEngine(deps: TrainerEngineDeps): TrainerEngine {
     await deps.detector.stop();
   }
 
-  return { state, start, stop };
+  return { state, start, stop, stopGame, advanceToGameOn };
 }
