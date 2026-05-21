@@ -12,9 +12,13 @@
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
 	import type { Verdict } from "../../services/trainerScorer";
+	import { normalizeTrainerSettings } from "../../state/trainerSettings";
+	import { reactiveLocalStorage } from "../../services/localStorage";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import CalibrationWizard from "./calibration-wizard.vue";
+	import HeadphonesWarning from "./headphones-warning.vue";
+	import PermissionDialog from "./permission-dialog.vue";
 	import TrainerPartition from "./trainer-partition.vue";
 	import TrainerScoreRail from "./trainer-score-rail.vue";
 	import TrainerToolbar from "./trainer-toolbar.vue";
@@ -66,6 +70,16 @@
 	const mode = ref<TrainerMode>("instrument");
 	const latencyMs = ref(0);
 	const calibrationOpen = ref(false);
+	const permissionOpen = ref(false);
+	const headphonesOpen = ref(false);
+
+	const settings = computed({
+		get: () => {
+			const raw = reactiveLocalStorage.bbTrainerSettings;
+			return normalizeTrainerSettings(raw ? JSON.parse(raw) : undefined);
+		},
+		set: (s) => { reactiveLocalStorage.bbTrainerSettings = JSON.stringify(s); },
+	});
 
 	const currentPattern = computed(() => tuneName.value && patternName.value
 		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
@@ -89,11 +103,27 @@
 	}, { immediate: true });
 
 	async function handleStart() {
-		try {
-			await engine.start();
-		} catch {
-			// mic denied — will surface via toast in Task 9.3
+		if (mode.value === "band" && !settings.value.headphonesWarningAcked) {
+			headphonesOpen.value = true;
+			return;
 		}
+		if (!settings.value.micPromptAcked) {
+			permissionOpen.value = true;
+			return;
+		}
+		await engine.start().catch(() => {});
+	}
+
+	function confirmHeadphones() {
+		settings.value = { ...settings.value, headphonesWarningAcked: true };
+		headphonesOpen.value = false;
+		void handleStart();
+	}
+
+	function confirmPermission() {
+		settings.value = { ...settings.value, micPromptAcked: true };
+		permissionOpen.value = false;
+		void engine.start().catch(() => {});
 	}
 
 	async function handleStop() {
@@ -179,6 +209,8 @@
 			:speedBpm="currentPattern?.speed ?? 100"
 			@apply="applyCalibration"
 		/>
+		<PermissionDialog v-model:open="permissionOpen" @confirm="confirmPermission" />
+		<HeadphonesWarning v-model:open="headphonesOpen" @confirm="confirmHeadphones" />
 	</div>
 </template>
 
