@@ -227,6 +227,9 @@
 	"trainer": {
 		"pattern-label": "Pattern",
 		"pick-tune": "Pick a tune from the sidebar to start training.",
+		"results": {
+			"title": "Session results"
+		},
 		"score": {
 			"title": "Score",
 			"avgDelta": "avg |Δ|",
