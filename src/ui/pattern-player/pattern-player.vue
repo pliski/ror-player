@@ -244,7 +244,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					<tr v-for="instrumentKey in config.instrumentKeys" :key="instrumentKey">
+					<tr v-for="instrumentKey in config.instrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
 						<th>{{config.instruments[instrumentKey].name()}}</th>
 						<td class="instrument-operations">
 							<HeadphonesButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />

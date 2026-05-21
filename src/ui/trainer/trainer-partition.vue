@@ -2,10 +2,12 @@
 	import { ref, watch } from "vue";
 	import PatternPlayer from "../pattern-player/pattern-player.vue";
 	import { type Verdict } from "../../services/trainerScorer";
+	import { Instrument } from "../../config";
 
 	const props = defineProps<{
 		tuneName: string;
 		patternName: string;
+		instrument: Instrument;
 		verdicts?: Map<number, Verdict>;
 	}>();
 
@@ -17,13 +19,15 @@
 		el.querySelectorAll(".stroke.verdict-good, .stroke.verdict-off, .stroke.verdict-miss")
 			.forEach((n) => n.classList.remove("verdict-good", "verdict-off", "verdict-miss"));
 		if (!props.verdicts) return;
+		const row = el.querySelector(`tr[data-instrument="${props.instrument}"]`);
+		if (!row) return;
 		for (const [strokeIdx, v] of props.verdicts) {
-			const cell = el.querySelector(`.stroke-i-${strokeIdx}`);
+			const cell = row.querySelector(`.stroke-i-${strokeIdx}`);
 			if (cell) cell.classList.add(`verdict-${v}`);
 		}
 	}
 
-	watch(() => props.verdicts && [...props.verdicts], applyVerdicts, { immediate: true });
+	watch([() => props.verdicts && [...props.verdicts], () => props.instrument], applyVerdicts, { immediate: true });
 </script>
 
 <template>

@@ -223,7 +223,7 @@
 					@stop="handleStop"
 					@calibrate="handleCalibrate"
 				/>
-				<TrainerPartition :tuneName="tuneName" :patternName="patternName" :verdicts="verdicts" />
+				<TrainerPartition :tuneName="tuneName" :patternName="patternName" :instrument="instrument" :verdicts="verdicts" />
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
 		</div>
