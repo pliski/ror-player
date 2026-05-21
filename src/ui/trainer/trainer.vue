@@ -135,7 +135,8 @@
 			permissionOpen.value = true;
 			return;
 		}
-		await engine.start().catch(() => {});
+		// eslint-disable-next-line no-console
+		await engine.start().catch((err) => { console.error("Trainer engine failed to start:", err); });
 	}
 
 	function confirmHeadphones() {
@@ -147,7 +148,8 @@
 	function confirmPermission() {
 		settings.value = { ...settings.value, micPromptAcked: true };
 		permissionOpen.value = false;
-		void engine.start().catch(() => {});
+		// eslint-disable-next-line no-console
+		void engine.start().catch((err) => { console.error("Trainer engine failed to start:", err); });
 	}
 
 	async function handleStop() {
