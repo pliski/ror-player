@@ -221,47 +221,81 @@ test("engine emits 'verdict' when the scorer matches a hit", async () => {
   expect(["good", "off"]).toContain(arg.verdict);
 });
 
-test("engine emits 'loopWrap' on main-player beat at position 0", async () => {
-  const deps = makeDeps(true);
-
-  // Capture handlers on each created beatbox by index.
+function makePositionedBeatboxFactory() {
+  // Beatbox factory that captures `on(ev, cb)` per instance, allowing tests to
+  // drive "play"/"beat"/"stop" with explicit arguments (notably beat positions).
+  type Handlers = {
+    play?: () => void;
+    beat?: (position: number) => void;
+    stop?: () => void;
+  };
   const beatboxes: Array<{
-    handlers: Record<string, (() => void) | undefined>;
+    handlers: Handlers;
     player: Beatbox;
     ref: BeatboxReference;
   }> = [];
-  const beatboxFactory = (_repeat: boolean) => {
-    const handlers: Record<string, (() => void) | undefined> = {};
+  const factory = (_repeat: boolean) => {
+    const handlers: Handlers = {};
     const player = {
       setPattern: vi.fn(),
       setBeatLength: vi.fn(),
       setRepeat: vi.fn(),
-      on: vi.fn((ev: string, cb: () => void) => { handlers[ev] = cb; }),
+      on: vi.fn((ev: keyof Handlers, cb: never) => { handlers[ev] = cb; }),
       play: vi.fn(),
       stop: vi.fn(),
       getPosition: vi.fn(() => 0),
     } as unknown as Beatbox;
     const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
-    const entry = { handlers, player, ref };
-    beatboxes.push(entry);
+    beatboxes.push({ handlers, player, ref });
     return { ref, player };
   };
+  return { factory, beatboxes };
+}
 
-  const engine = createTrainerEngine(deps, { beatboxFactory });
+test("engine emits 'loopWrap' when main-player beat position decreases", async () => {
+  const deps = makeDeps(true);
+  const { factory, beatboxes } = makePositionedBeatboxFactory();
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
   engine.configure(makeDefaultConfig());
 
   const loopWrapSpy = vi.fn();
   engine.on("loopWrap", loopWrapSpy);
 
   await engine.start();
-  // count-in beatbox is beatboxes[0]; trigger its "stop" → onCountInComplete builds the main beatbox
-  beatboxes[0].handlers.stop?.();
-  // Allow microtasks queued by onCountInComplete to flush
+  beatboxes[0].handlers.stop?.();  // count-in done → onCountInComplete builds main
   await Promise.resolve();
   expect(beatboxes.length).toBeGreaterThanOrEqual(2);
-  // Simulate main player's "play" to set loopBaselinePerf, then a beat at position 0
+
   beatboxes[1].handlers.play?.();
-  beatboxes[1].handlers.beat?.();
+  // Initial beats inside the first iteration — no wrap yet
+  beatboxes[1].handlers.beat?.(0);
+  beatboxes[1].handlers.beat?.(15);
+  beatboxes[1].handlers.beat?.(31);
+  expect(loopWrapSpy).not.toHaveBeenCalled();
+  // Position resets at loop boundary (31 → 0) — wrap detected
+  beatboxes[1].handlers.beat?.(0);
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1);
+});
+
+test("engine detects wrap even when position never lands on 0 (race with audio clock)", async () => {
+  // If the audio clock has advanced past 0 by the time our handler runs, we'd
+  // still see the descending transition 31 → 1. Regression guard for Bug 10.
+  const deps = makeDeps(true);
+  const { factory, beatboxes } = makePositionedBeatboxFactory();
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
+  engine.configure(makeDefaultConfig());
+
+  const loopWrapSpy = vi.fn();
+  engine.on("loopWrap", loopWrapSpy);
+
+  await engine.start();
+  beatboxes[0].handlers.stop?.();
+  await Promise.resolve();
+
+  beatboxes[1].handlers.play?.();
+  beatboxes[1].handlers.beat?.(0);
+  beatboxes[1].handlers.beat?.(31);
+  beatboxes[1].handlers.beat?.(1);  // skipped 0 due to clock race — still a wrap
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
 });
 

@@ -155,16 +155,22 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     mainPlayer.setPattern(mainRaw);
     mainPlayer.setBeatLength(60_000 / cfg.speedBpm / config.playTime);
     mainPlayer.setRepeat(true);
+    // Detect wraps via a position-decreased transition rather than `position === 0`:
+    // Beatbox emits "beat" with the position captured at scheduling time, but
+    // re-querying mainPlayer.getPosition() in the handler races against the
+    // audio clock and may have advanced past 0 by the time we check.
+    let lastBeatPosition = -1;
     mainPlayer.on("play", () => {
       loopBaselinePerf = performance.now();
+      lastBeatPosition = -1;
     });
-    mainPlayer.on("beat", () => {
-      // Detect loop wrap by sudden drop in getPosition
-      if (mainPlayer.getPosition() === 0 && loopBaselinePerf !== null) {
+    mainPlayer.on("beat", (position: number) => {
+      if (lastBeatPosition >= 0 && position < lastBeatPosition && loopBaselinePerf !== null) {
         loopBaselinePerf = performance.now();
         scorer?.onLoopWrap();
         events.emit("loopWrap", {});
       }
+      lastBeatPosition = position;
     });
     mainPlayer.play();
 
