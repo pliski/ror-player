@@ -922,6 +922,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/audioworklet@npm:^0.0.100":
+  version: 0.0.100
+  resolution: "@types/audioworklet@npm:0.0.100"
+  checksum: 10/c876f026ab33d102f4f64597b55c9a45b3678ccd5fbb69e248f819f2ee9686948e8c2e76e3c19af508cc6abb1782dc35388192c3f3e68f164a6141aa94f424b5
+  languageName: node
+  linkType: hard
+
 "@types/bootstrap@npm:^5.2.10":
   version: 5.2.10
   resolution: "@types/bootstrap@npm:5.2.10"
@@ -4341,6 +4348,7 @@ __metadata:
     "@fortawesome/free-solid-svg-icons": "npm:^7.1.0"
     "@fortawesome/vue-fontawesome": "npm:^3.1.3"
     "@popperjs/core": "npm:^2.11.8"
+    "@types/audioworklet": "npm:^0.0.100"
     "@types/bootstrap": "npm:^5.2.10"
     "@types/file-saver": "npm:^2.0.7"
     "@types/lodash-es": "npm:^4.17.12"
