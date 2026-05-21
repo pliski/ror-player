@@ -63,3 +63,56 @@ export function buildExpectedTimeline(
     toleranceMs: { ...tolerance },
   };
 }
+
+function classifyDelta(delta: number, tolerance: { good: number; off: number }): "good" | "off" {
+  return Math.abs(delta) <= tolerance.good ? "good" : "off";
+}
+
+export function matchHits(
+  detected: DetectedHit[],
+  expected: ExpectedHit[],
+  windowMs: number,
+  tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
+): MatchResult {
+  // Walking-pointer greedy nearest-neighbour. Both arrays MUST be time-sorted.
+  const matched: MatchResult["matched"] = [];
+  const misses: ExpectedHit[] = [];
+  const extras: DetectedHit[] = [];
+
+  let ei = 0; // expected pointer
+  let di = 0; // detected pointer
+
+  while (ei < expected.length && di < detected.length) {
+    const e = expected[ei];
+    const d = detected[di];
+    const delta = d.t - e.t;
+
+    if (delta < -windowMs) {
+      // Detected is too far before expected — it's an extra
+      extras.push(d);
+      di++;
+    } else if (delta > windowMs) {
+      // Expected is too far before detected — it's a miss
+      misses.push(e);
+      ei++;
+    } else {
+      // Within window. Greedy: check if the NEXT detected is closer to this expected.
+      const dNext = detected[di + 1];
+      if (dNext && Math.abs(dNext.t - e.t) < Math.abs(delta) && Math.abs(dNext.t - e.t) <= windowMs) {
+        // Current d is a strictly worse match — it's an extra; advance.
+        extras.push(d);
+        di++;
+      } else {
+        matched.push({ d, e, delta, verdict: classifyDelta(delta, tolerance) });
+        ei++;
+        di++;
+      }
+    }
+  }
+
+  // Drain remainders
+  while (ei < expected.length) misses.push(expected[ei++]);
+  while (di < detected.length) extras.push(detected[di++]);
+
+  return { matched, misses, extras };
+}
