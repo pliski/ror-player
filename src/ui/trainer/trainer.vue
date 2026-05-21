@@ -12,6 +12,7 @@
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
 	import type { Verdict } from "../../services/trainerScorer";
+	import { SILENT_STROKES } from "../../services/trainerScorer";
 	import { normalizeTrainerSettings } from "../../state/trainerSettings";
 	import { reactiveLocalStorage } from "../../services/localStorage";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
@@ -84,6 +85,11 @@
 	const currentPattern = computed(() => tuneName.value && patternName.value
 		? getPatternFromState(state.value, tuneName.value, patternName.value) ?? undefined
 		: undefined);
+
+	const hasHits = computed(() => {
+		if (!currentPattern.value || !instrument.value) return false;
+		return (currentPattern.value[instrument.value] ?? []).some((s) => !SILENT_STROKES.has(s ?? ""));
+	});
 
 	const micPermission = createMicPermission();
 	const detector = createOnsetDetector();
@@ -204,7 +210,7 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<TrainerScoreRail :stats="stats" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" v-if="tuneName && patternName" />
+			<TrainerScoreRail :stats="stats" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" :disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined" v-if="tuneName && patternName" />
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<TrainerToolbar
 					:pattern="currentPattern"
@@ -212,6 +218,7 @@
 					v-model:mode="mode"
 					v-model:latencyMs="latencyMs"
 					:state="trainerState"
+					:disabled="!hasHits"
 					@start="handleStart"
 					@stop="handleStop"
 					@calibrate="handleCalibrate"

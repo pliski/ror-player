@@ -7,6 +7,7 @@
 		stats: SessionStats;
 		micActive: boolean;
 		latencyMs: number;
+		disabledReason?: string;
 	}>();
 
 	const i18n = useI18n();
@@ -17,12 +18,15 @@
 	<!-- Desktop right rail -->
 	<aside class="bb-trainer-score-rail d-none d-md-flex">
 		<h5 class="m-0">{{ i18n.t("trainer.score.title") }}</h5>
-		<div class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.avgDelta") }}</span><strong>{{ Math.round(props.stats.meanAbsDelta) }} ms</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.drift") }}</span><strong>{{ props.stats.drift > 0 ? "+" : "" }}{{ Math.round(props.stats.drift) }} ms</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.hits") }}</span><strong>{{ props.stats.hits }}/{{ props.stats.expectedTotal }}</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.misses") }}</span><strong>{{ props.stats.misses }}</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.extras") }}</span><strong>{{ props.stats.extras }}</strong></div>
+		<div v-if="props.disabledReason" class="bb-trainer-disabled-reason">{{ props.disabledReason }}</div>
+		<template v-else>
+			<div class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.avgDelta") }}</span><strong>{{ Math.round(props.stats.meanAbsDelta) }} ms</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.drift") }}</span><strong>{{ props.stats.drift > 0 ? "+" : "" }}{{ Math.round(props.stats.drift) }} ms</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.hits") }}</span><strong>{{ props.stats.hits }}/{{ props.stats.expectedTotal }}</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.misses") }}</span><strong>{{ props.stats.misses }}</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.extras") }}</span><strong>{{ props.stats.extras }}</strong></div>
+		</template>
 		<hr>
 		<div class="bb-trainer-mic">
 			<fa :icon="props.micActive ? 'microphone' : 'microphone-slash'" :class="{ 'text-danger': props.micActive }" />
@@ -33,22 +37,28 @@
 
 	<!-- Mobile top strip -->
 	<header class="bb-trainer-score-strip d-md-none" @click="sheetOpen = !sheetOpen">
-		<div class="bb-trainer-headline-sm">{{ props.stats.headlineScore }}</div>
-		<div class="bb-trainer-strip-summary">
-			<small>{{ i18n.t("trainer.score.avgDelta") }} {{ Math.round(props.stats.meanAbsDelta) }} ms · {{ props.stats.hits }}/{{ props.stats.expectedTotal }}</small>
-		</div>
+		<div v-if="props.disabledReason" class="bb-trainer-strip-summary"><small>{{ props.disabledReason }}</small></div>
+		<template v-else>
+			<div class="bb-trainer-headline-sm">{{ props.stats.headlineScore }}</div>
+			<div class="bb-trainer-strip-summary">
+				<small>{{ i18n.t("trainer.score.avgDelta") }} {{ Math.round(props.stats.meanAbsDelta) }} ms · {{ props.stats.hits }}/{{ props.stats.expectedTotal }}</small>
+			</div>
+		</template>
 		<fa :icon="props.micActive ? 'microphone' : 'microphone-slash'" :class="{ 'text-danger': props.micActive }" />
 		<fa icon="caret-down" />
 	</header>
 
 	<!-- Mobile expanded sheet -->
 	<div class="bb-trainer-score-sheet" v-if="sheetOpen">
-		<div class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.avgDelta") }}</span><strong>{{ Math.round(props.stats.meanAbsDelta) }} ms</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.drift") }}</span><strong>{{ props.stats.drift > 0 ? "+" : "" }}{{ Math.round(props.stats.drift) }} ms</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.hits") }}</span><strong>{{ props.stats.hits }}/{{ props.stats.expectedTotal }}</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.misses") }}</span><strong>{{ props.stats.misses }}</strong></div>
-		<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.extras") }}</span><strong>{{ props.stats.extras }}</strong></div>
+		<div v-if="props.disabledReason" class="bb-trainer-disabled-reason">{{ props.disabledReason }}</div>
+		<template v-else>
+			<div class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.avgDelta") }}</span><strong>{{ Math.round(props.stats.meanAbsDelta) }} ms</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.drift") }}</span><strong>{{ props.stats.drift > 0 ? "+" : "" }}{{ Math.round(props.stats.drift) }} ms</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.hits") }}</span><strong>{{ props.stats.hits }}/{{ props.stats.expectedTotal }}</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.misses") }}</span><strong>{{ props.stats.misses }}</strong></div>
+			<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.extras") }}</span><strong>{{ props.stats.extras }}</strong></div>
+		</template>
 	</div>
 </template>
 
@@ -81,6 +91,12 @@
 	}
 	.bb-trainer-mic {
 		font-size: 12px;
+	}
+	.bb-trainer-disabled-reason {
+		font-size: 13px;
+		color: var(--bs-secondary-color);
+		font-style: italic;
+		text-align: center;
 	}
 	.bb-trainer-score-strip {
 		position: sticky;

@@ -14,6 +14,7 @@
 		mode: TrainerMode;
 		state: TrainerState;
 		latencyMs: number;
+		disabled?: boolean;
 	}>();
 
 	const emit = defineEmits<{
@@ -46,6 +47,7 @@
 			type="button"
 			class="btn btn-lg flex-grow-1 flex-md-grow-0"
 			:class="buttonClass"
+			:disabled="props.disabled && !isRunning"
 			@click="isRunning ? emit('stop') : emit('start')"
 		>
 			<fa :icon="isRunning ? 'stop' : 'play'" /> {{ buttonLabel }}

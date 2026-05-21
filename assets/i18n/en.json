@@ -226,6 +226,7 @@
 	},
 	"trainer": {
 		"pick-tune": "Pick a tune from the sidebar to start training.",
+		"no-hits": "No strokes to train for this instrument.",
 		"results": {
 			"title": "Session results"
 		},
