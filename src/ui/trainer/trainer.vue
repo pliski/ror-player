@@ -233,7 +233,7 @@
 		<CalibrationWizard
 			:open="calibrationOpen"
 			@update:open="calibrationOpen = $event"
-			:speedBpm="currentPattern?.speed ?? 100"
+			:micPermission="micPermission"
 			@apply="applyCalibration"
 		/>
 		<PermissionDialog v-model:open="permissionOpen" @confirm="confirmPermission" />
