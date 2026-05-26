@@ -40,11 +40,18 @@
 		tuneName: string;
 		patternName: string;
 		readonly?: boolean;
+		onlyInstrument?: Instrument;
+		hidePlaybackControls?: boolean;
 	}>(), {
-		readonly: false
+		readonly: false,
+		hidePlaybackControls: false
 	});
 
 	const i18n = useI18n();
+
+	const visibleInstrumentKeys = computed(() =>
+		props.onlyInstrument ? [props.onlyInstrument] : config.instrumentKeys
+	);
 
 	const pattern = computed(() => getPatternFromState(state.value, props.tuneName, props.patternName)!);
 
@@ -236,17 +243,17 @@
 			<table class="bb-pattern-player" :class="`time-${pattern.time}`">
 				<thead>
 					<tr>
-						<td colspan="2" class="instrument-operations">
-							<MuteButton instrument="all" v-model:playbackSettings="playbackSettings"/>
+						<td :colspan="hidePlaybackControls ? 1 : 2" :class="{ 'instrument-operations': !hidePlaybackControls }">
+							<MuteButton v-if="!hidePlaybackControls" instrument="all" v-model:playbackSettings="playbackSettings"/>
 						</td>
 						<td v-for="i in upbeatBeats" :key="i" :colspan="i == 1 ? (pattern.upbeat-1) % pattern.time + 1 : pattern.time" class="beat" :class="getBeatClass(i-1 - upbeatBeats)" @click="setPosition($event)"><span>{{i - upbeatBeats}}</span></td>
 						<td v-for="i in pattern.length" :key="i" :colspan="pattern.time" class="beat" :class="getBeatClass(i-1)" @click="setPosition($event)"><span>{{i}}</span></td>
 					</tr>
 				</thead>
 				<tbody>
-					<tr v-for="instrumentKey in config.instrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
+					<tr v-for="instrumentKey in visibleInstrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
 						<th>{{config.instruments[instrumentKey].name()}}</th>
-						<td class="instrument-operations">
+						<td class="instrument-operations" v-if="!hidePlaybackControls">
 							<HeadphonesButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 							<MuteButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
 						</td>
