@@ -41,6 +41,20 @@ export interface SessionStats {
 
 export const DEFAULT_TOLERANCE = { good: 60, off: 150 } as const;
 
+/**
+ * Maps a signed timing delta (ms; + = late, − = early) to a marker position on the
+ * timing meter. `percent` is 0 (left/late edge) … 50 (centre/on-time) … 100 (right/
+ * early edge), clamped. `zone` is "good" within the good tolerance, else "off".
+ */
+export function deltaToPosition(
+  delta: number,
+  tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
+): { percent: number; zone: "good" | "off" } {
+  const percent = Math.max(0, Math.min(100, 50 - (delta / tolerance.off) * 50));
+  const zone: "good" | "off" = Math.abs(delta) <= tolerance.good ? "good" : "off";
+  return { percent, zone };
+}
+
 export function buildExpectedTimeline(
   pattern: Pattern,
   instrument: Instrument,
@@ -144,7 +158,7 @@ export function scoreSession(
 }
 
 export interface ScorerHandle {
-  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off" } | { verdict: "extra" } | null;
+  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } | null;
   onLoopWrap(): void;
   finalize(opts?: { stopAtMs: number; tailMs: number }): void;
   stats(): SessionStats;
@@ -161,7 +175,7 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
   let finalMatch: MatchResult = { matched: [], misses: [], extras: [] };
   const windowMs = timeline.toleranceMs.off + 50;
 
-  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off" } | { verdict: "extra" } {
+  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } {
     let bestI = -1;
     let bestAbs = Infinity;
     for (let i = 0; i < timeline.expected.length; i++) {
@@ -169,8 +183,8 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
       if (d < bestAbs) { bestAbs = d; bestI = i; }
     }
     if (bestI < 0 || bestAbs > windowMs) return { verdict: "extra" };
-    const v: Verdict = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
-    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v };
+    const v: "good" | "off" = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
+    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: hit.t - timeline.expected[bestI].t };
   }
 
   return {

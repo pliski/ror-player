@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer } from "../trainerScorer";
+import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer, deltaToPosition } from "../trainerScorer";
 import { normalizePattern } from "../../state/pattern";
 
 test("SILENT_STROKES matches the documented set", () => {
@@ -232,4 +232,30 @@ test("createScorer stats() before finalize returns live approximation", () => {
   expect(live.misses).toBe(0);
   s.finalize();
   expect(s.stats().hits).toBe(1);  // finalize agrees
+});
+
+test("acceptHit returns a signed delta (late > 0, early < 0, on-time 0)", () => {
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", "X", ".", "."] });
+  const tl = buildExpectedTimeline(pattern, "sn", 120); // strokeMs 125; expected at t=0 and t=125
+  const scorer = createScorer(tl);
+  expect(scorer.acceptHit({ t: 125, energy: 0.5 })).toMatchObject({ strokeIdx: 1, verdict: "good", delta: 0 });
+  expect(scorer.acceptHit({ t: 140, energy: 0.5 })).toMatchObject({ delta: 15 });  // 15 ms late
+  expect(scorer.acceptHit({ t: 110, energy: 0.5 })).toMatchObject({ delta: -15 }); // 15 ms early
+});
+
+test("deltaToPosition: centre, zone boundary, edges, clamp, direction", () => {
+  // on-time → centre, good zone
+  expect(deltaToPosition(0)).toEqual({ percent: 50, zone: "good" });
+  // late (+) leans left (<50); early (-) leans right (>50)
+  expect(deltaToPosition(60).percent).toBeCloseTo(30, 5);   // +good → 20% left of centre
+  expect(deltaToPosition(-60).percent).toBeCloseTo(70, 5);
+  // zone flips just past the good tolerance
+  expect(deltaToPosition(60).zone).toBe("good");
+  expect(deltaToPosition(61).zone).toBe("off");
+  // off tolerance lands at the edges
+  expect(deltaToPosition(150)).toEqual({ percent: 0, zone: "off" });   // late edge (left)
+  expect(deltaToPosition(-150)).toEqual({ percent: 100, zone: "off" }); // early edge (right)
+  // beyond off is clamped
+  expect(deltaToPosition(400).percent).toBe(0);
+  expect(deltaToPosition(-400).percent).toBe(100);
 });
