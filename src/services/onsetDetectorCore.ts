@@ -8,6 +8,7 @@ export interface DetectorState {
   params: DetectorParams;
   noiseFloor: number;
   lastFireFrame: number;
+  lastHitEnergy: number;
   armed: boolean;
 }
 
@@ -32,6 +33,16 @@ export const MIN_NOISE_FLOOR = 0.015;
 // never reach the trigger even at high user sensitivity (multiplier < 1.5).
 export const LEARN_RATIO = 1.5;
 
+// Post-hit decay gate. A resonant drum (Surdo) or a flam/tail (Repi, snare)
+// emits weak secondary onsets 50–200 ms after the attack that belong to the SAME
+// notated stroke. Right after a hit of energy E, a new onset must clear
+// E × DECAY_GATE_RATIO; that bar relaxes linearly to 0 over DECAY_GATE_FRAMES.
+// Energy-relative (not a blanket time window) so a genuine next stroke of similar
+// force still fires even when played close behind — only much weaker echoes drop.
+// Frames assume ~48 kHz / 128-sample blocks (≈300 ms); tuned against captured logs.
+export const DECAY_GATE_RATIO = 0.5;
+export const DECAY_GATE_FRAMES = 112;
+
 export function rmsOfBlock(block: Float32Array): number {
   if (block.length === 0) return 0;
   let sumSq = 0;
@@ -44,6 +55,7 @@ export function createDetectorState(params: DetectorParams): DetectorState {
     params,
     noiseFloor: Math.max(MIN_NOISE_FLOOR, params.noiseFloorInit ?? 0.001),
     lastFireFrame: -Infinity,
+    lastHitEnergy: 0,
     armed: true,
   };
 }
@@ -76,8 +88,18 @@ export function processBlock(
   }
 
   const pastRefractory = (currentFrame - state.lastFireFrame) > state.params.refractoryFrames;
-  if (exceeds && pastRefractory && state.armed) {
+
+  // Decay gate: weak onsets in the wake of a recent strong hit are that hit's
+  // resonance/flam/tail, not a new stroke (see DECAY_GATE_RATIO).
+  const sinceFire = currentFrame - state.lastFireFrame;
+  const decayGate =
+    sinceFire < DECAY_GATE_FRAMES
+      ? state.lastHitEnergy * DECAY_GATE_RATIO * (1 - sinceFire / DECAY_GATE_FRAMES)
+      : 0;
+
+  if (exceeds && pastRefractory && state.armed && rms > decayGate) {
     state.lastFireFrame = currentFrame;
+    state.lastHitEnergy = rms;
     state.armed = false;
     return { frame: currentFrame, energy: rms };
   }

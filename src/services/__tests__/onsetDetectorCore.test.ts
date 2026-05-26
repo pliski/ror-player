@@ -101,6 +101,39 @@ test("processBlock: a stroke re-arms on a dip below the trigger, even while ener
   expect(processBlock(state, loud, 60)).not.toBeNull(); // stroke 2 must still fire
 });
 
+test("processBlock: a weak secondary peak shortly after a strong hit is suppressed (decay tail)", () => {
+  // The originating instrument (e.g. Low Surdo) rings: ~180 ms after the attack a
+  // resonant bump re-crosses the trigger at a small fraction of the attack energy.
+  // It belongs to the same notated stroke, so it must not count as a new onset.
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  expect(processBlock(state, new Float32Array(128).fill(0.8), 50)).not.toBeNull(); // strong attack
+  for (let i = 51; i < 117; i++) processBlock(state, quiet, i); // energy dips (re-arms) ~180 ms
+  expect(processBlock(state, new Float32Array(128).fill(0.07), 117)).toBeNull(); // weak resonant bump
+});
+
+test("processBlock: a strong stroke soon after another strong stroke is not suppressed", () => {
+  // The decay gate keys off ENERGY, not time: a genuine next stroke of comparable
+  // force must fire even when it lands close behind (fast playing, ~120 ms here).
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  expect(processBlock(state, new Float32Array(128).fill(0.8), 50)).not.toBeNull(); // stroke 1
+  for (let i = 51; i < 95; i++) processBlock(state, quiet, i);
+  expect(processBlock(state, new Float32Array(128).fill(0.8), 95)).not.toBeNull(); // stroke 2
+});
+
+test("processBlock: a weak onset long after a hit fires once the decay gate has relaxed", () => {
+  // The gate is temporary, not a permanent raised threshold.
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  expect(processBlock(state, new Float32Array(128).fill(0.8), 50)).not.toBeNull();
+  for (let i = 51; i < 170; i++) processBlock(state, quiet, i); // past the decay-gate window
+  expect(processBlock(state, new Float32Array(128).fill(0.07), 170)).not.toBeNull();
+});
+
 test("processBlock: two separate strokes with a quiet dip between them both fire", () => {
   // Guards that the re-arm gate does not suppress genuinely distinct strokes:
   // energy returns to the floor between them, so the second one re-arms and fires.
