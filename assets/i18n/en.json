@@ -236,7 +236,10 @@
 			"drift": "drift",
 			"hits": "hits",
 			"misses": "misses",
-			"extras": "extras"
+			"extras": "extras",
+			"behind": "behind",
+			"early": "early",
+			"details": "Details"
 		},
 		"mic": {
 			"listening": "listening",
