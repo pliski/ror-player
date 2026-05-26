@@ -219,6 +219,8 @@ test("engine emits 'verdict' when the scorer matches a hit", async () => {
   const arg = verdictSpy.mock.calls[0][0];
   expect(typeof arg.strokeIdx).toBe("number");
   expect(["good", "off"]).toContain(arg.verdict);
+  // Hit at t=250 aligns exactly to the expected stroke at t=250 → delta 0.
+  expect(arg.delta).toBe(0);
 });
 
 function makePositionedBeatboxFactory() {

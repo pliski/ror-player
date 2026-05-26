@@ -39,7 +39,7 @@ export interface TrainerEngineOpts {
 }
 
 export type TrainerEngineEvents = {
-  verdict: { strokeIdx: number; verdict: Verdict };
+  verdict: { strokeIdx: number; verdict: Verdict; delta: number };
   loopWrap: object;
 } & Record<string, unknown>;
 
@@ -122,7 +122,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       const tLoop = ((tRel % loopLen) + loopLen) % loopLen;
       const verdict = scorer.acceptHit({ t: tLoop, energy: e.energy });
       if (verdict && "strokeIdx" in verdict) {
-        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict });
+        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict, delta: verdict.delta });
       }
     };
     deps.detector.on("onset", onsetHandler);
