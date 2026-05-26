@@ -8,6 +8,7 @@ export interface DetectorState {
   params: DetectorParams;
   noiseFloor: number;
   lastFireFrame: number;
+  armed: boolean;
 }
 
 export interface OnsetEvent {
@@ -24,6 +25,15 @@ export interface OnsetEvent {
 // (≤0.034) and the softest real percussion hits (≥0.05).
 export const MIN_NOISE_FLOOR = 0.015;
 
+// Energy boundary (× noise floor) marking "back near the floor". Two uses, one
+// idea: (1) the floor only LEARNS from blocks this quiet, so a hit's loud body
+// or decay tail can never drag the floor — and thus the trigger threshold —
+// upward (the positive feedback that silenced detection after a few loops);
+// and (2) the detector only RE-ARMS once energy drops this low, so one strike's
+// 100–300 ms decay tail can't fire repeatedly. Capped at `multiplier` so it can
+// never reach the trigger (floor × multiplier) even at high user sensitivity.
+export const QUIET_RATIO = 1.5;
+
 export function rmsOfBlock(block: Float32Array): number {
   if (block.length === 0) return 0;
   let sumSq = 0;
@@ -36,6 +46,7 @@ export function createDetectorState(params: DetectorParams): DetectorState {
     params,
     noiseFloor: Math.max(MIN_NOISE_FLOOR, params.noiseFloorInit ?? 0.001),
     lastFireFrame: -Infinity,
+    armed: true,
   };
 }
 
@@ -49,19 +60,23 @@ export function processBlock(
   currentFrame: number,
 ): OnsetEvent | null {
   const rms = rmsOfBlock(block);
+  const quietThreshold = state.noiseFloor * Math.min(QUIET_RATIO, state.params.multiplier);
 
-  // Adaptive floor: only learn when block is below 4× current floor
-  if (rms < state.noiseFloor * 4) {
+  // Only learn the floor from genuinely-quiet blocks, and re-arm once energy
+  // has fallen back near the floor (see QUIET_RATIO).
+  if (rms < quietThreshold) {
     state.noiseFloor = Math.max(
       MIN_NOISE_FLOOR,
       state.noiseFloor * 0.995 + rms * 0.005,
     );
+    state.armed = true;
   }
 
   const exceeds = rms > state.noiseFloor * state.params.multiplier;
   const pastRefractory = (currentFrame - state.lastFireFrame) > state.params.refractoryFrames;
-  if (exceeds && pastRefractory) {
+  if (exceeds && pastRefractory && state.armed) {
     state.lastFireFrame = currentFrame;
+    state.armed = false;
     return { frame: currentFrame, energy: rms };
   }
   return null;

@@ -31,16 +31,71 @@ test("processBlock: loud transient on quiet baseline triggers", () => {
   expect(trigger!.energy).toBeGreaterThan(0.4);
 });
 
-test("processBlock: refractory blocks repeats", () => {
-  const state = createDetectorState({ multiplier: 3, refractoryFrames: 100 });
+test("processBlock: sustained loud input fires once, not repeatedly, until energy falls back to the floor", () => {
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
   const quiet = new Float32Array(128).fill(0.0001);
   for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
   const loud = new Float32Array(128).fill(0.5);
+  // First loud block fires.
   expect(processBlock(state, loud, 50)).not.toBeNull();
-  // Immediately after — within refractory
-  expect(processBlock(state, loud, 51)).toBeNull();
-  // After refractory
-  expect(processBlock(state, loud, 151)).not.toBeNull();
+  // Sustained loud must NOT re-fire — even long past the refractory window —
+  // because energy never dropped back near the floor to re-arm the detector.
+  // (A held tone is one event; re-firing it is the "extras" bug.)
+  for (let i = 51; i < 200; i++) {
+    expect(processBlock(state, loud, i)).toBeNull();
+  }
+  // A quiet gap re-arms the detector; the next loud block fires again.
+  for (let i = 200; i < 210; i++) processBlock(state, quiet, i);
+  expect(processBlock(state, loud, 210)).not.toBeNull();
+});
+
+test("processBlock: sustained elevated audio does not ratchet the noise floor", () => {
+  // A resonant instrument keeps RMS well above ambient but below the trigger.
+  // The floor must NOT learn from it (that positive feedback is what raised the
+  // threshold above real hits and killed detection after a few loops).
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const sustained = new Float32Array(128).fill(0.05); // > floor×1.5 (0.0225), < old floor×4 (0.06)
+  for (let i = 0; i < 500; i++) processBlock(state, sustained, i);
+  expect(state.noiseFloor).toBe(MIN_NOISE_FLOOR);
+});
+
+test("processBlock: a real hit still fires after a stretch of sustained elevated audio", () => {
+  // Because the floor was held (previous test), the trigger threshold stays sane
+  // and a genuine hit after the sustained bed is still detected.
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const sustained = new Float32Array(128).fill(0.05);
+  for (let i = 0; i < 500; i++) processBlock(state, sustained, i);
+  // Brief quiet gap so the detector re-arms (the sustained block fired once at frame 0).
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 500; i < 510; i++) processBlock(state, quiet, i);
+  const hit = new Float32Array(128).fill(0.1);
+  expect(processBlock(state, hit, 510)).not.toBeNull();
+});
+
+test("processBlock: a single strike with a long decay tail produces exactly one onset", () => {
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  // One strike: an attack then a decay tail that stays above the trigger (0.045)
+  // for many blocks — longer than the refractory window.
+  const tail = [0.2, 0.15, 0.1, 0.08, 0.07, 0.06, 0.05, 0.048, 0.046];
+  let fires = 0;
+  tail.forEach((amp, k) => {
+    if (processBlock(state, new Float32Array(128).fill(amp), 50 + k)) fires++;
+  });
+  expect(fires).toBe(1);
+});
+
+test("processBlock: two separate strokes with a quiet dip between them both fire", () => {
+  // Guards that the re-arm gate does not suppress genuinely distinct strokes:
+  // energy returns to the floor between them, so the second one re-arms and fires.
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  const loud = new Float32Array(128).fill(0.2);
+  expect(processBlock(state, loud, 50)).not.toBeNull(); // stroke 1
+  for (let i = 51; i < 56; i++) processBlock(state, quiet, i); // dip back to the floor
+  expect(processBlock(state, loud, 56)).not.toBeNull(); // stroke 2
 });
 
 test("processBlock: respects noiseFloorInit", () => {
