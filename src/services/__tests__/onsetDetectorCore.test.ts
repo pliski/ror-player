@@ -86,6 +86,21 @@ test("processBlock: a single strike with a long decay tail produces exactly one 
   expect(fires).toBe(1);
 });
 
+test("processBlock: a stroke re-arms on a dip below the trigger, even while energy stays above the noise floor", () => {
+  // A resonant instrument only dips part-way between strokes: below the trigger
+  // (floor×3 ≈ 0.045) but well above the floor's learn window (floor×1.5 ≈ 0.0225).
+  // The detector must re-arm on that partial dip — otherwise sustained/resonant
+  // instruments stop registering after the first hit (observed: ~2 of 9 detected).
+  const state = createDetectorState({ multiplier: 3, refractoryFrames: 5 });
+  const quiet = new Float32Array(128).fill(0.0001);
+  for (let i = 0; i < 50; i++) processBlock(state, quiet, i);
+  const loud = new Float32Array(128).fill(0.2);
+  const partialDip = new Float32Array(128).fill(0.03);
+  expect(processBlock(state, loud, 50)).not.toBeNull(); // stroke 1
+  for (let i = 51; i < 60; i++) processBlock(state, partialDip, i); // dips below trigger, not to floor
+  expect(processBlock(state, loud, 60)).not.toBeNull(); // stroke 2 must still fire
+});
+
 test("processBlock: two separate strokes with a quiet dip between them both fire", () => {
   // Guards that the re-arm gate does not suppress genuinely distinct strokes:
   // energy returns to the floor between them, so the second one re-arms and fires.

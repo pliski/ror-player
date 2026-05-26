@@ -25,14 +25,12 @@ export interface OnsetEvent {
 // (≤0.034) and the softest real percussion hits (≥0.05).
 export const MIN_NOISE_FLOOR = 0.015;
 
-// Energy boundary (× noise floor) marking "back near the floor". Two uses, one
-// idea: (1) the floor only LEARNS from blocks this quiet, so a hit's loud body
-// or decay tail can never drag the floor — and thus the trigger threshold —
-// upward (the positive feedback that silenced detection after a few loops);
-// and (2) the detector only RE-ARMS once energy drops this low, so one strike's
-// 100–300 ms decay tail can't fire repeatedly. Capped at `multiplier` so it can
-// never reach the trigger (floor × multiplier) even at high user sensitivity.
-export const QUIET_RATIO = 1.5;
+// Ceiling (× noise floor) below which the floor is allowed to LEARN. Kept well
+// under the trigger (floor × multiplier) so a hit's loud body or decay tail can
+// never drag the floor — and thus the threshold — upward; that positive feedback
+// is what silenced detection after a few loops. Capped at `multiplier` so it can
+// never reach the trigger even at high user sensitivity (multiplier < 1.5).
+export const LEARN_RATIO = 1.5;
 
 export function rmsOfBlock(block: Float32Array): number {
   if (block.length === 0) return 0;
@@ -60,19 +58,23 @@ export function processBlock(
   currentFrame: number,
 ): OnsetEvent | null {
   const rms = rmsOfBlock(block);
-  const quietThreshold = state.noiseFloor * Math.min(QUIET_RATIO, state.params.multiplier);
+  const exceeds = rms > state.noiseFloor * state.params.multiplier;
 
-  // Only learn the floor from genuinely-quiet blocks, and re-arm once energy
-  // has fallen back near the floor (see QUIET_RATIO).
-  if (rms < quietThreshold) {
+  // Learn the floor only from genuinely-quiet blocks (see LEARN_RATIO).
+  if (rms < state.noiseFloor * Math.min(LEARN_RATIO, state.params.multiplier)) {
     state.noiseFloor = Math.max(
       MIN_NOISE_FLOOR,
       state.noiseFloor * 0.995 + rms * 0.005,
     );
+  }
+
+  // Re-arm once energy leaves the fireable zone. One strike's sustained decay
+  // stays above the trigger and so fires only once, but a genuine next stroke —
+  // which only has to dip below the trigger, not all the way to ambient — re-arms.
+  if (!exceeds) {
     state.armed = true;
   }
 
-  const exceeds = rms > state.noiseFloor * state.params.multiplier;
   const pastRefractory = (currentFrame - state.lastFireFrame) > state.params.refractoryFrames;
   if (exceeds && pastRefractory && state.armed) {
     state.lastFireFrame = currentFrame;
