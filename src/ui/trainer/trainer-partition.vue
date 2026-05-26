@@ -32,7 +32,7 @@
 
 <template>
 	<div class="bb-trainer-partition" ref="containerRef">
-		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" />
+		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" hidePlaybackControls />
 	</div>
 </template>
 
