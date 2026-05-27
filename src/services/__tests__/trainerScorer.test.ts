@@ -25,6 +25,23 @@ test("buildExpectedTimeline derives expected hits from snare line", () => {
   ]);
 });
 
+test("buildExpectedTimeline aligns strokeIdx with the upbeat-adjusted partition cells", () => {
+  // upbeat=1 with an empty pickup slot (like real Low Surdo lines): the array is
+  // [pickup, main…] so raw index 0 is the pickup and the main downbeat is raw index 1.
+  // PatternPlayer labels the cell at raw index `i` as `stroke-i-${i - upbeat}`, and the
+  // engine anchors loopBaselinePerf at raw index 0, so expected `t` stays raw-indexed.
+  const pattern = normalizePattern({
+    length: 1, time: 4, upbeat: 1, sn: [" ", "X", ".", ".", "X"]
+  });
+  const tl = buildExpectedTimeline(pattern, "sn", 120);
+  const strokeMs = 60_000 / (120 * 4); // 125 ms
+  expect(tl.expected).toEqual([
+    { strokeIdx: 0, t: 1 * strokeMs },  // first main stroke: cell stroke-i-0, not stroke-i-1
+    { strokeIdx: 3, t: 4 * strokeMs }   // last slot: scored at all (buggy loop dropped it)
+  ]);
+  expect(tl.loopLengthMs).toBe(5 * strokeMs); // full array incl. upbeat, not 4*strokeMs
+});
+
 test("matchHits with no hits and no expected", () => {
   const r = matchHits([], [], DEFAULT_TOLERANCE.off + 50);
   expect(r).toEqual({ matched: [], misses: [], extras: [] });

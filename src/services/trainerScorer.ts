@@ -62,18 +62,23 @@ export function buildExpectedTimeline(
   tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
 ): ExpectedTimeline {
   const strokeMs = 60_000 / (speedBpm * pattern.time);
-  const totalStrokes = pattern.length * pattern.time;
+  // pattern[instrument] is [pickup(upbeat slots) … main(length*time slots)]; iterate the
+  // FULL array so the last `upbeat` main strokes are scored, and so the played loop length
+  // (which includes the pickup) matches.
+  const slotCount = pattern.length * pattern.time + pattern.upbeat;
   const line = pattern[instrument] ?? [];
   const expected: ExpectedHit[] = [];
-  for (let i = 0; i < totalStrokes; i++) {
+  for (let i = 0; i < slotCount; i++) {
     const stroke = line[i];
     if (!SILENT_STROKES.has(stroke ?? "")) {
-      expected.push({ strokeIdx: i, t: i * strokeMs });
+      // strokeIdx matches PatternPlayer's cell label `stroke-i-${i - upbeat}`; t stays
+      // raw-indexed because loopBaselinePerf is anchored at raw index 0, not the downbeat.
+      expected.push({ strokeIdx: i - pattern.upbeat, t: i * strokeMs });
     }
   }
   return {
     expected,
-    loopLengthMs: totalStrokes * strokeMs,
+    loopLengthMs: slotCount * strokeMs,
     toleranceMs: { ...tolerance },
   };
 }
