@@ -41,6 +41,19 @@ export interface SessionStats {
 
 export const DEFAULT_TOLERANCE = { good: 60, off: 150 } as const;
 
+export type Difficulty = "easy" | "normal" | "hard";
+
+// Lower difficulty widens the windows; "normal" is ×1 so it equals DEFAULT_TOLERANCE.
+const DIFFICULTY_FACTOR: Record<Difficulty, number> = { easy: 1.75, normal: 1, hard: 0.6 };
+
+export function toleranceForDifficulty(difficulty: Difficulty): { good: number; off: number } {
+  const f = DIFFICULTY_FACTOR[difficulty];
+  return {
+    good: Math.round(DEFAULT_TOLERANCE.good * f),
+    off: Math.round(DEFAULT_TOLERANCE.off * f),
+  };
+}
+
 /**
  * Maps a signed timing delta (ms; + = late, − = early) to a marker position on the
  * timing meter. `percent` is 0 (left/late edge) … 50 (centre/on-time) … 100 (right/

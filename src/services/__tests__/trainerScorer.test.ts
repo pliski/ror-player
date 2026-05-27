@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer, deltaToPosition } from "../trainerScorer";
+import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer, deltaToPosition, toleranceForDifficulty } from "../trainerScorer";
 import { normalizePattern } from "../../state/pattern";
 
 test("SILENT_STROKES matches the documented set", () => {
@@ -275,4 +275,10 @@ test("deltaToPosition: centre, zone boundary, edges, clamp, direction", () => {
   // beyond off is clamped
   expect(deltaToPosition(400).percent).toBe(0);
   expect(deltaToPosition(-400).percent).toBe(100);
+});
+
+test("toleranceForDifficulty scales DEFAULT_TOLERANCE per level", () => {
+  expect(toleranceForDifficulty("normal")).toEqual(DEFAULT_TOLERANCE);   // ×1.0 → identical to today
+  expect(toleranceForDifficulty("easy")).toEqual({ good: 105, off: 263 }); // ×1.75, rounded
+  expect(toleranceForDifficulty("hard")).toEqual({ good: 36, off: 90 });   // ×0.6
 });
