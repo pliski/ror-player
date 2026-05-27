@@ -75,6 +75,8 @@
 			<label class="btn btn-outline-secondary btn-sm" for="mode-band">{{ i18n.t("trainer.toolbar.modeBand") }}</label>
 		</div>
 
+		<span class="badge text-bg-secondary align-self-center" :title="i18n.t('trainer.difficulty.label')">{{ i18n.t(`trainer.difficulty.${difficulty}`) }}</span>
+
 		<HybridPopoverButton variant="secondary" :title="i18n.t('trainer.settings.title')">
 			<template #button><fa icon="cog" /></template>
 			<LatencySlider :modelValue="latencyMs" @update:modelValue="emit('update:latencyMs', $event)" @calibrate="emit('calibrate')" />
