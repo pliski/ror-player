@@ -252,6 +252,12 @@
 			"modeInstrument": "Instrument",
 			"modeBand": "Band"
 		},
+		"difficulty": {
+			"label": "Difficulty",
+			"easy": "Easy",
+			"normal": "Normal",
+			"hard": "Hard"
+		},
 		"latency": {
 			"label": "Latency offset",
 			"calibrate": "Calibrate…"
