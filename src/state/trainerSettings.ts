@@ -8,6 +8,7 @@ export const trainerSettingsValidator = z.object({
     (v) => typeof v === "number" ? Math.min(3, Math.max(0.3, v)) : v,
     z.number().default(1)
   ),
+  difficulty: z.enum(["easy", "normal", "hard"]).default("easy"),
   micPromptAcked: z.boolean().default(false),
   headphonesWarningAcked: z.boolean().default(false),
   lastInstrument: instrumentValidator.optional(),

@@ -7,7 +7,8 @@ test("normalizeTrainerSettings defaults", () => {
     sensitivity: 1,
     micPromptAcked: false,
     headphonesWarningAcked: false,
-    lastMode: "instrument"
+    lastMode: "instrument",
+    difficulty: "easy"
   });
 });
 
@@ -26,4 +27,8 @@ test("normalizeTrainerSettings preserves last instrument and tune", () => {
     lastTuneName: "Funk",
     lastPatternName: "Tune"
   });
+});
+
+test("normalizeTrainerSettings preserves difficulty", () => {
+  expect(normalizeTrainerSettings({ difficulty: "hard" }).difficulty).toBe("hard");
 });
