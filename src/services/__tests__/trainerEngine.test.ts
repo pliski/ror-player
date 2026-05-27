@@ -223,6 +223,44 @@ test("engine emits 'verdict' when the scorer matches a hit", async () => {
   expect(arg.delta).toBe(0);
 });
 
+test("difficulty scales the scoring tolerance threaded into the timeline", async () => {
+  const deps = makeDeps(true);
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument", difficulty: "hard" });
+  await engine.start();
+
+  const verdictSpy = vi.fn();
+  engine.on("verdict", verdictSpy);
+
+  const baselinePerf = 1000;
+  await engine.advanceToGameOn(baselinePerf);
+
+  // Stroke at t=250ms; hit is 50ms late. Normal good=60 → "good"; Hard good=36 → "off".
+  onsetSub!({ t_perf: baselinePerf + 300, energy: 0.5 });
+
+  expect(verdictSpy).toHaveBeenCalledTimes(1);
+  expect(verdictSpy.mock.calls[0][0].verdict).toBe("off");
+  expect(verdictSpy.mock.calls[0][0].delta).toBe(50);
+});
+
+test("changing difficulty during gameOn resets to idle", async () => {
+  const deps = makeDeps(true);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const cfg = {
+    pattern: normalizePattern({ length: 1, time: 4, sn: ["X"] }),
+    instrument: "sn" as const, speedBpm: 120, mode: "instrument" as const, difficulty: "easy" as const,
+  };
+  engine.configure(cfg);
+  await engine.start();
+  await engine.advanceToGameOn();
+  engine.configure({ ...cfg, difficulty: "hard" });
+  expect(engine.state.value).toBe("idle");
+});
+
 function makePositionedBeatboxFactory() {
   // Beatbox factory that captures `on(ev, cb)` per instance, allowing tests to
   // drive "play"/"beat"/"stop" with explicit arguments (notably beat positions).

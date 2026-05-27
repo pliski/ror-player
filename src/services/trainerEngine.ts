@@ -2,7 +2,7 @@ import { Ref, ref } from "vue";
 import mitt, { Emitter } from "mitt";
 import { MicPermission } from "./mediaPermissions";
 import { OnsetDetector } from "./onsetDetector";
-import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict } from "./trainerScorer";
+import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict, toleranceForDifficulty, Difficulty } from "./trainerScorer";
 import config, { Instrument } from "../config";
 import { Pattern, normalizePattern } from "../state/pattern";
 import type Beatbox from "beatbox.js";
@@ -24,6 +24,7 @@ export interface TrainerConfig {
   instrument: Instrument;
   speedBpm: number;
   mode: TrainerMode;
+  difficulty?: Difficulty;
 }
 
 export interface TrainerEngineDeps {
@@ -103,14 +104,18 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
         oldCfg.pattern !== c.pattern ||
         oldCfg.instrument !== c.instrument ||
         oldCfg.speedBpm !== c.speedBpm ||
-        oldCfg.mode !== c.mode;
+        oldCfg.mode !== c.mode ||
+        oldCfg.difficulty !== c.difficulty;
       if (changed) void stop();
     }
   }
 
   function setupScorerAndDetector() {
     if (!cfg) throw new Error("Trainer not configured");
-    const timeline = buildExpectedTimeline(cfg.pattern, cfg.instrument, cfg.speedBpm);
+    const timeline = buildExpectedTimeline(
+      cfg.pattern, cfg.instrument, cfg.speedBpm,
+      toleranceForDifficulty(cfg.difficulty ?? "normal"),
+    );
     scorer = createScorer(timeline);
 
     onsetHandler = (e: { t_perf: number; energy: number }) => {
