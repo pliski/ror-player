@@ -3,10 +3,11 @@
 	import config, { Instrument } from "../../config";
 	import { useI18n } from "../../services/i18n";
 	import { Pattern } from "../../state/pattern";
-	import { SILENT_STROKES } from "../../services/trainerScorer";
+	import { SILENT_STROKES, type Difficulty } from "../../services/trainerScorer";
 	import { TrainerState, TrainerMode } from "../../services/trainerEngine";
 	import HybridPopoverButton from "../utils/hybrid-popover-button.vue";
 	import LatencySlider from "./latency-slider.vue";
+	import DifficultySelector from "./difficulty-selector.vue";
 
 	const props = defineProps<{
 		pattern: Pattern | undefined;
@@ -14,6 +15,7 @@
 		mode: TrainerMode;
 		state: TrainerState;
 		latencyMs: number;
+		difficulty: Difficulty;
 		disabled?: boolean;
 	}>();
 
@@ -21,6 +23,7 @@
 		"update:instrument": [v: Instrument];
 		"update:mode": [v: TrainerMode];
 		"update:latencyMs": [v: number];
+		"update:difficulty": [v: Difficulty];
 		"start": [];
 		"stop": [];
 		"calibrate": [];
@@ -75,6 +78,7 @@
 		<HybridPopoverButton variant="secondary" :title="i18n.t('trainer.settings.title')">
 			<template #button><fa icon="cog" /></template>
 			<LatencySlider :modelValue="latencyMs" @update:modelValue="emit('update:latencyMs', $event)" @calibrate="emit('calibrate')" />
+			<DifficultySelector class="mt-2" :modelValue="difficulty" @update:modelValue="emit('update:difficulty', $event)" />
 		</HybridPopoverButton>
 	</div>
 </template>

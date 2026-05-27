@@ -11,7 +11,7 @@
 	import { createTrainerEngine } from "../../services/trainerEngine";
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
-	import type { Verdict } from "../../services/trainerScorer";
+	import type { Verdict, Difficulty } from "../../services/trainerScorer";
 	import { SILENT_STROKES } from "../../services/trainerScorer";
 	import { normalizeTrainerSettings } from "../../state/trainerSettings";
 	import { reactiveLocalStorage } from "../../services/localStorage";
@@ -70,6 +70,7 @@
 	const instrument = ref<Instrument>("sn");
 	const mode = ref<TrainerMode>("instrument");
 	const latencyMs = ref(0);
+	const difficulty = ref<Difficulty>("easy");
 	const calibrationOpen = ref(false);
 	const permissionOpen = ref(false);
 	const headphonesOpen = ref(false);
@@ -97,18 +98,19 @@
 
 	const trainerState = computed(() => engine.state.value);
 
-	watch([currentPattern, instrument, mode, () => currentPattern.value?.speed], () => {
+	watch([currentPattern, instrument, mode, () => currentPattern.value?.speed, difficulty], () => {
 		if (currentPattern.value && instrument.value) {
 			engine.configure({
 				pattern: currentPattern.value,
 				instrument: instrument.value,
 				speedBpm: currentPattern.value.speed,
 				mode: mode.value,
+				difficulty: difficulty.value,
 			});
 		}
 	}, { immediate: true });
 
-	watch([instrument, mode, tuneName, patternName, latencyMs], () => {
+	watch([instrument, mode, tuneName, patternName, latencyMs, difficulty], () => {
 		settings.value = {
 			...settings.value,
 			lastInstrument: instrument.value,
@@ -116,6 +118,7 @@
 			lastTuneName: tuneName.value,
 			lastPatternName: patternName.value,
 			latencyOffsetMs: latencyMs.value,
+			difficulty: difficulty.value,
 		};
 	}, { deep: false });
 
@@ -125,6 +128,7 @@
 	if (s.lastInstrument) instrument.value = s.lastInstrument;
 	mode.value = s.lastMode;
 	latencyMs.value = s.latencyOffsetMs;
+	difficulty.value = s.difficulty;
 
 	async function handleStart() {
 		if (!settings.value.headphonesWarningAcked) {
@@ -224,6 +228,7 @@
 					v-model:instrument="instrument"
 					v-model:mode="mode"
 					v-model:latencyMs="latencyMs"
+					v-model:difficulty="difficulty"
 					:state="trainerState"
 					:disabled="!hasHits"
 					@start="handleStart"
