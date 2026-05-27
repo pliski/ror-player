@@ -172,11 +172,13 @@
 	});
 
 	const verdicts = ref<Map<number, Verdict>>(new Map());
+	const recentHits = ref<{ delta: number; verdict: Verdict }[]>([]);
 
-	function handleVerdict(e: { strokeIdx: number; verdict: Verdict }) {
+	function handleVerdict(e: { strokeIdx: number; verdict: Verdict; delta: number }) {
 		const next = new Map(verdicts.value);
 		next.set(e.strokeIdx, e.verdict);
 		verdicts.value = next;
+		recentHits.value = [...recentHits.value, { delta: e.delta, verdict: e.verdict }].slice(-5);
 	}
 
 	function handleLoopWrap() {
@@ -184,7 +186,10 @@
 	}
 
 	watch(trainerState, (s, prev) => {
-		if (s === "countIn" && prev !== "countIn") verdicts.value = new Map();
+		if (s === "countIn" && prev !== "countIn") {
+			verdicts.value = new Map();
+			recentHits.value = [];
+		}
 	});
 
 	onMounted(() => {
@@ -212,7 +217,7 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<TrainerScoreRail :stats="stats" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" :disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined" v-if="tuneName && patternName" />
+			<TrainerScoreRail :stats="stats" :recentHits="recentHits" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" :disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined" v-if="tuneName && patternName" />
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<TrainerToolbar
 					:pattern="currentPattern"
@@ -238,6 +243,13 @@
 		/>
 		<PermissionDialog v-model:open="permissionOpen" @confirm="confirmPermission" />
 		<HeadphonesWarning v-model:open="headphonesOpen" @confirm="confirmHeadphones" />
+		<div class="bb-trainer-rotate-overlay">
+			<div class="bb-trainer-rotate-inner">
+				<div class="bb-trainer-rotate-glyph">⟳</div>
+				<h4>{{ i18n.t("trainer.rotate.title") }}</h4>
+				<p>{{ i18n.t("trainer.rotate.hint") }}</p>
+			</div>
+		</div>
 	</div>
 </template>
 
@@ -246,6 +258,7 @@
 		display: flex;
 		flex-grow: 1;
 		min-height: 0;
+		position: relative;
 
 		.bb-tune-list {
 			flex-grow: 1;
@@ -257,17 +270,30 @@
 			flex-direction: row;
 			min-height: 0;
 
-			@media (max-width: 767.98px) {
-				flex-direction: column;
-			}
-
 			.bb-trainer-pane {
 				flex-grow: 1;
 				display: flex;
 				flex-direction: column;
 				min-height: 0;
 				overflow: auto;
-				order: 1;
+			}
+		}
+
+		.bb-trainer-rotate-overlay { display: none; }
+		@media (orientation: portrait) and (max-width: 767.98px) {
+			.bb-trainer-rotate-overlay {
+				display: flex;
+				position: absolute;
+				inset: 0;
+				z-index: 50;
+				align-items: center;
+				justify-content: center;
+				text-align: center;
+				padding: 24px;
+				background: var(--bs-body-bg);
+
+				.bb-trainer-rotate-glyph { font-size: 44px; line-height: 1; margin-bottom: 12px; }
+				p { color: var(--bs-secondary-color); font-size: 14px; max-width: 320px; }
 			}
 		}
 	}

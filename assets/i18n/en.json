@@ -286,6 +286,10 @@
 			"title": "Headphones recommended",
 			"body": "For accurate scoring, please use headphones — otherwise the microphone will hear the playback, not just you.",
 			"continue": "Continue"
+		},
+		"rotate": {
+			"title": "Rotate to landscape",
+			"hint": "The trainer needs the width to show your timing and the pattern together."
 		}
 	},
 	"pattern-list-filter": {
