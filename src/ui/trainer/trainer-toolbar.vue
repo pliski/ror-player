@@ -79,6 +79,7 @@
 		</div>
 
 		<span class="badge text-bg-secondary align-self-center" :title="i18n.t('trainer.difficulty.label')">{{ i18n.t(`trainer.difficulty.${difficulty}`) }}</span>
+		<span class="badge text-bg-secondary align-self-center" :title="i18n.t('trainer.speed.label')">{{ speedBpm }} BPM</span>
 
 		<HybridPopoverButton variant="secondary" :title="i18n.t('trainer.settings.title')">
 			<template #button><fa icon="cog" /></template>
