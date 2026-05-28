@@ -17,7 +17,7 @@
 	import { isEqual } from "lodash-es";
 	import StrokeDropdown from "./stroke-dropdown.vue";
 	import { injectStateRequired } from "../../services/state";
-	import { computed, nextTick, ref, watch } from "vue";
+	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 	import { showConfirm } from "../utils/alert";
 	import vTooltip from "../utils/tooltip";
 	import { CustomPopover } from "../utils/popover.vue";
@@ -69,22 +69,71 @@
 
 	const upbeatBeats = computed(() => Math.ceil(pattern.value.upbeat / pattern.value.time));
 
-	// In multi-line mode, decompose strokes into [upbeat-or-empty, measure1, measure2, …, measureN].
-	// Measure 0 contains the upbeat cells (length = pattern.upbeat) — joined to measure 1 visually.
-	// Other measures each contain pattern.time cells.
-	const measures = computed(() => {
-		const out: { startStrokeIdx: number; cellCount: number }[] = [];
-		// First measure absorbs the upbeat
-		const firstCells = pattern.value.upbeat + pattern.value.time;
-		out.push({ startStrokeIdx: 0, cellCount: firstCells });
-		// Remaining measures
-		for (let m = 1; m < pattern.value.length; m++) {
-			out.push({
-				startStrokeIdx: pattern.value.upbeat + m * pattern.value.time,
-				cellCount: pattern.value.time
+	// Multi-line v2: container-width-driven balanced rows.
+	// Cell width is locked (CSS --bb-cell-width: 30px) so naturalWidth is pure arithmetic
+	// and column alignment across measure-tables is pixel-perfect.
+	const CELL_WIDTH_PX = 30;
+
+	// Tracked container width drives rowCount; updated via ResizeObserver below.
+	const containerW = ref(0);
+
+	// rowGroups: balanced split of measures into rows. Rows where rowIdx > 0 AND upbeat > 0
+	// get a leadingSpacerCells > 0 so measure 5 aligns column-wise under measure 1, etc.
+	const rowGroups = computed(() => {
+		if (!props.multiLineWhenNarrow) return [];
+		const totalCells = pattern.value.length * pattern.value.time + pattern.value.upbeat;
+		const naturalW = totalCells * CELL_WIDTH_PX;
+		// Before first measurement (containerW === 0), assume single-line fit.
+		const cw = containerW.value || naturalW;
+		const rowCount = naturalW <= cw ? 1 : Math.ceil(naturalW / cw);
+		const measuresPerRow = Math.ceil(pattern.value.length / rowCount);
+
+		const groups: { rowIdx: number; leadingSpacerCells: number; measures: { index: number; startStrokeIdx: number; cellCount: number }[] }[] = [];
+		for (let r = 0; r < rowCount; r++) {
+			const startMeasure = r * measuresPerRow;
+			const endMeasure = Math.min(startMeasure + measuresPerRow, pattern.value.length);
+			const measures: { index: number; startStrokeIdx: number; cellCount: number }[] = [];
+			for (let m = startMeasure; m < endMeasure; m++) {
+				if (m === 0) {
+					measures.push({ index: 0, startStrokeIdx: 0, cellCount: pattern.value.upbeat + pattern.value.time });
+				} else {
+					measures.push({ index: m, startStrokeIdx: pattern.value.upbeat + m * pattern.value.time, cellCount: pattern.value.time });
+				}
+			}
+			groups.push({
+				rowIdx: r,
+				leadingSpacerCells: (r > 0 && pattern.value.upbeat > 0) ? pattern.value.upbeat : 0,
+				measures
 			});
 		}
-		return out;
+		return groups;
+	});
+
+	// ResizeObserver lifecycle: attach when multi-line mode is on, disconnect when off or unmounting.
+	let resizeObserver: ResizeObserver | null = null;
+
+	function attachResizeObserver() {
+		if (!props.multiLineWhenNarrow || !containerRef.value) return;
+		if (!resizeObserver) {
+			resizeObserver = new ResizeObserver((entries) => {
+				const w = entries[0]?.contentRect.width;
+				if (typeof w === "number") containerW.value = w;
+			});
+		}
+		resizeObserver.observe(containerRef.value);
+		containerW.value = containerRef.value.offsetWidth;
+	}
+
+	function detachResizeObserver() {
+		resizeObserver?.disconnect();
+		resizeObserver = null;
+	}
+
+	onMounted(() => { attachResizeObserver(); });
+	onBeforeUnmount(() => { detachResizeObserver(); });
+	watch(() => props.multiLineWhenNarrow, (enabled) => {
+		if (enabled) attachResizeObserver();
+		else detachResizeObserver();
 	});
 
 	const containerRef = ref<HTMLElement>();
@@ -292,40 +341,42 @@
 				</tbody>
 			</table>
 
-			<div v-else class="bb-pattern-player-measures">
-				<table v-for="(measure, mIdx) in measures" :key="mIdx" class="bb-pattern-player bb-pattern-player-measure" :class="`time-${pattern.time}`">
-					<thead>
-						<tr>
-							<td v-if="mIdx === 0 || !hidePlaybackControls" :colspan="hidePlaybackControls ? 1 : (mIdx === 0 ? 2 : 1)" :class="{ 'instrument-operations': !hidePlaybackControls }">
-								<MuteButton v-if="mIdx === 0 && !hidePlaybackControls" instrument="all" v-model:playbackSettings="playbackSettings"/>
-							</td>
-							<template v-if="mIdx === 0 && pattern.upbeat > 0">
-								<td v-for="i in upbeatBeats" :key="`up-${i}`" :colspan="i == 1 ? (pattern.upbeat-1) % pattern.time + 1 : pattern.time" class="beat" :class="getBeatClass(i-1 - upbeatBeats)" @click="setPosition($event)"><span>{{i - upbeatBeats}}</span></td>
-							</template>
-							<td :colspan="pattern.time" class="beat" :class="getBeatClass(mIdx)" @click="setPosition($event)"><span>{{mIdx + 1}}</span></td>
-						</tr>
-					</thead>
-					<tbody>
-						<tr v-for="instrumentKey in visibleInstrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
-							<th v-if="mIdx === 0">{{config.instruments[instrumentKey].name()}}</th>
-							<td class="instrument-operations" v-if="!hidePlaybackControls">
-								<HeadphonesButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
-								<MuteButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
-							</td>
-							<td v-for="i in measure.cellCount" :key="i" class="stroke" :class="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" v-tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''">
-								<span v-if="readonly" class="stroke-inner">{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}</span>
-								<a v-if="!readonly"
-									href="javascript:" class="stroke-inner"
-									:id="`bb-pattern-player-stroke-${instrumentKey}-${measure.startStrokeIdx + i - 1}`"
-									@click="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)"
-									draggable="false"
-								>
-									{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}
-								</a>
-							</td>
-						</tr>
-					</tbody>
-				</table>
+			<div v-else class="bb-pattern-player-rows">
+				<div v-for="row in rowGroups" :key="row.rowIdx" class="bb-pattern-player-row">
+					<div v-if="row.leadingSpacerCells > 0" class="bb-pattern-player-row-spacer" :style="{ width: (row.leadingSpacerCells * 30) + 'px' }"></div>
+					<table v-for="measure in row.measures" :key="measure.index" class="bb-pattern-player bb-pattern-player-measure" :class="`time-${pattern.time}`">
+						<thead>
+							<tr>
+								<td v-if="!hidePlaybackControls" :colspan="1" class="instrument-operations">
+									<MuteButton v-if="measure.index === 0" instrument="all" v-model:playbackSettings="playbackSettings"/>
+								</td>
+								<template v-if="measure.index === 0 && pattern.upbeat > 0">
+									<td v-for="i in upbeatBeats" :key="`up-${i}`" :colspan="i == 1 ? (pattern.upbeat-1) % pattern.time + 1 : pattern.time" class="beat" :class="getBeatClass(i-1 - upbeatBeats)" @click="setPosition($event)"><span>{{i - upbeatBeats}}</span></td>
+								</template>
+								<td :colspan="pattern.time" class="beat" :class="getBeatClass(measure.index)" @click="setPosition($event)"><span>{{measure.index + 1}}</span></td>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="instrumentKey in visibleInstrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
+								<td class="instrument-operations" v-if="!hidePlaybackControls">
+									<HeadphonesButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
+									<MuteButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
+								</td>
+								<td v-for="i in measure.cellCount" :key="i" class="stroke" :class="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" v-tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''">
+									<span v-if="readonly" class="stroke-inner">{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}</span>
+									<a v-if="!readonly"
+										href="javascript:" class="stroke-inner"
+										:id="`bb-pattern-player-stroke-${instrumentKey}-${measure.startStrokeIdx + i - 1}`"
+										@click="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)"
+										draggable="false"
+									>
+										{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}
+									</a>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
 			</div>
 
 			<AbstractPlayer
@@ -354,21 +405,37 @@
 		padding: 1em 0;
 		position: relative;
 
-		// Multi-line mode: each measure is its own table, wrapped in a flex container.
-		// flex-wrap lets the browser handle wrap thresholds — no JS width measurement.
+		// Multi-line v2: JS-computed balanced rows, column-aligned via fixed cell width.
+		// Each row is a horizontal flex container of measure-tables, optionally prefixed by
+		// a leading spacer (for rows 2+ when the pattern has an upbeat — aligns measure 5
+		// column-wise under measure 1, etc.).
 		&.multi-line-when-narrow {
-			.bb-pattern-player-measures {
+			--bb-cell-width: 30px;
+
+			.bb-pattern-player-rows {
 				display: flex;
-				flex-wrap: wrap;
-				gap: 8px 0;
+				flex-direction: column;
+				gap: 8px;
+			}
+			.bb-pattern-player-row {
+				display: flex;
+				flex-direction: row;
 				align-items: flex-start;
+				gap: 0;
+			}
+			.bb-pattern-player-row-spacer {
+				flex-shrink: 0;
+				// width is set inline from rowGroups (leadingSpacerCells * 30 px).
 			}
 			.bb-pattern-player-measure {
-				// Each measure-table sizes naturally; flex-wrap acts on it as a unit.
 				flex: 0 0 auto;
 			}
-			// Hide the sweep marker overlay — the per-beat .beat.active highlight already
-			// provides position feedback, and the overlay's x-position assumes a single table.
+			// Fixed cell width — alignment across measure-tables/rows depends on this.
+			.stroke {
+				width: var(--bb-cell-width);
+			}
+			// Hide the sweep marker overlay — the per-beat .beat.active highlight provides
+			// position feedback, and the overlay's x-position assumes a single table.
 			.bb-position-marker {
 				display: none !important;
 			}
