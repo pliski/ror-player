@@ -232,7 +232,17 @@
 		</HybridSidebar>
 
 		<div class="bb-trainer-main">
-			<TrainerScoreRail :stats="stats" :recentHits="recentHits" :micActive="trainerState !== 'idle' && trainerState !== 'results'" :latencyMs="latencyMs" :disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined" v-if="tuneName && patternName" />
+			<TrainerScoreRail
+					:stats="stats"
+					:recentHits="recentHits"
+					:micActive="trainerState !== 'idle' && trainerState !== 'results'"
+					:latencyMs="latencyMs"
+					:state="trainerState"
+					:difficulty="difficulty"
+					:speedBpm="speedBpm"
+					:disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined"
+					v-if="tuneName && patternName"
+				/>
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<TrainerToolbar
 					:pattern="currentPattern"

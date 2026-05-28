@@ -1,18 +1,23 @@
 <script setup lang="ts">
 	import { ref, computed } from "vue";
 	import { useI18n } from "../../services/i18n";
-	import { type SessionStats, type Verdict, deltaToPosition } from "../../services/trainerScorer";
+	import { type SessionStats, type Verdict, type Difficulty, deltaToPosition } from "../../services/trainerScorer";
+	import type { TrainerState } from "../../services/trainerEngine";
 
 	const props = defineProps<{
 		stats: SessionStats;
 		recentHits?: { delta: number; verdict: Verdict }[];
 		micActive: boolean;
 		latencyMs: number;
+		state: TrainerState;
+		difficulty: Difficulty;
+		speedBpm: number;
 		disabledReason?: string;
 	}>();
 
 	const i18n = useI18n();
 	const detailsOpen = ref(false);
+	const isIdle = computed(() => props.state === "idle" && !props.disabledReason);
 
 	// Oldest → newest; age 0 = newest (brightest + pulses).
 	const markers = computed(() => {
@@ -30,12 +35,12 @@
 
 <template>
 	<aside class="bb-trainer-score-rail">
-		<h5 class="m-0">{{ i18n.t("trainer.score.title") }}</h5>
 		<div v-if="props.disabledReason" class="bb-trainer-disabled-reason">{{ props.disabledReason }}</div>
 		<template v-else>
-			<div class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
+			<div v-if="isIdle" class="bb-trainer-headline idle">{{ i18n.t("trainer.score.idle") }}</div>
+			<div v-else class="bb-trainer-headline">{{ props.stats.headlineScore }}</div>
 
-			<div class="bb-trainer-meter">
+			<div class="bb-trainer-meter" :class="{ idle: isIdle }">
 				<div class="bb-trainer-meter-zone"></div>
 				<div class="bb-trainer-meter-center"></div>
 				<div
@@ -53,6 +58,8 @@
 				<span>{{ i18n.t("trainer.score.early") }}</span>
 			</div>
 
+			<div class="bb-trainer-spacer"></div>
+
 			<button type="button" class="bb-trainer-details-toggle" :aria-expanded="detailsOpen" @click="detailsOpen = !detailsOpen">
 				<fa icon="caret-down" class="caret" :class="{ open: detailsOpen }" /> {{ i18n.t("trainer.score.details") }}
 			</button>
@@ -63,13 +70,24 @@
 				<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.misses") }}</span><strong>{{ props.stats.misses }}</strong></div>
 				<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.extras") }}</span><strong>{{ props.stats.extras }}</strong></div>
 			</div>
+
+			<hr>
+
+			<div class="bb-trainer-status">
+				<div class="bb-trainer-status-row">
+					<fa :icon="props.micActive ? 'microphone' : 'microphone-slash'" :class="{ 'text-danger': props.micActive }" />
+					{{ props.micActive ? i18n.t("trainer.mic.listening") : i18n.t("trainer.mic.stopped") }}
+				</div>
+				<div class="bb-trainer-status-row split">
+					<span>{{ i18n.t(`trainer.difficulty.${props.difficulty}`) }}</span>
+					<span>{{ props.speedBpm }} BPM</span>
+				</div>
+				<div class="bb-trainer-status-row split">
+					<span class="text-muted">{{ i18n.t("trainer.latency.label") }}</span>
+					<span>{{ props.latencyMs }} ms</span>
+				</div>
+			</div>
 		</template>
-		<hr>
-		<div class="bb-trainer-mic">
-			<fa :icon="props.micActive ? 'microphone' : 'microphone-slash'" :class="{ 'text-danger': props.micActive }" />
-			{{ props.micActive ? i18n.t("trainer.mic.listening") : i18n.t("trainer.mic.stopped") }}
-			<small class="text-muted ms-1">lag {{ props.latencyMs }} ms</small>
-		</div>
 	</aside>
 </template>
 
@@ -83,11 +101,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-
-		@media (max-width: 767.98px) {
-			width: 120px;
-			padding: 8px;
-		}
 	}
 	.bb-trainer-headline {
 		font-size: 36px;
@@ -95,6 +108,14 @@
 		color: var(--bs-success);
 		text-align: center;
 		line-height: 1;
+
+		&.idle {
+			font-size: 14px;
+			font-weight: normal;
+			font-style: italic;
+			color: var(--bs-secondary-color);
+			padding-top: 8px;
+		}
 	}
 	.bb-trainer-meter {
 		position: relative;
@@ -102,6 +123,8 @@
 		border-radius: 8px;
 		background: var(--bs-secondary-bg);
 		margin-top: 2px;
+
+		&.idle { opacity: 0.35; }
 
 		.bb-trainer-meter-zone {
 			position: absolute;
@@ -138,6 +161,7 @@
 		font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
 		color: var(--bs-secondary-color);
 	}
+	.bb-trainer-spacer { flex-grow: 1; }
 	.bb-trainer-details-toggle {
 		background: none; border: none; padding: 2px 0; text-align: left;
 		font-size: 12px; color: var(--bs-secondary-color); cursor: pointer;
@@ -147,7 +171,20 @@
 	}
 	.bb-trainer-details { display: flex; flex-direction: column; gap: 4px; }
 	.bb-trainer-stat { display: flex; justify-content: space-between; font-size: 12px; }
-	.bb-trainer-mic { font-size: 12px; margin-top: auto; }
+	.bb-trainer-status {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 12px;
+
+		.bb-trainer-status-row {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+
+			&.split { justify-content: space-between; }
+		}
+	}
 	.bb-trainer-disabled-reason {
 		font-size: 13px; color: var(--bs-secondary-color); font-style: italic; text-align: center;
 	}

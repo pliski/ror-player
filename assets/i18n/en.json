@@ -239,7 +239,8 @@
 			"extras": "extras",
 			"behind": "behind",
 			"early": "early",
-			"details": "Details"
+			"details": "Details",
+			"idle": "Press ▶ to begin"
 		},
 		"mic": {
 			"listening": "listening",
