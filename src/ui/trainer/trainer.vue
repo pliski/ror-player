@@ -222,7 +222,7 @@
 
 <template>
 	<div class="bb-trainer">
-		<HybridSidebar v-model:isExpanded="isSidebarExpanded" :toggleContainer="sidebarToggleContainer">
+		<HybridSidebar v-model:isExpanded="isSidebarExpanded" :toggleContainer="sidebarToggleContainer" expandBreakpoint="md">
 			<TuneList v-model:tuneName="tuneNameForList" />
 			<template v-slot:toggle>
 				<button type="button" class="btn btn-secondary" @click="isSidebarExpanded = !isSidebarExpanded">
