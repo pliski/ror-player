@@ -252,6 +252,10 @@
 			"modeInstrument": "Instrument",
 			"modeBand": "Band"
 		},
+		"speed": {
+			"label": "Speed",
+			"reset": "Reset"
+		},
 		"difficulty": {
 			"label": "Difficulty",
 			"easy": "Easy",
