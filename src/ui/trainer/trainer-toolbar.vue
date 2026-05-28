@@ -59,17 +59,14 @@
 			<fa :icon="isRunning ? 'stop' : 'play'" /> {{ buttonLabel }}
 		</button>
 
-		<div class="bb-trainer-instrument-picker">
-			<label for="bb-trainer-instrument-select" class="form-label small mb-0">{{ i18n.t("trainer.toolbar.instrument") }}</label>
-			<select id="bb-trainer-instrument-select" class="form-select form-select-sm" :value="instrument" @change="emit('update:instrument', ($event.target as HTMLSelectElement).value as Instrument)">
-				<option
-					v-for="k in config.instrumentKeys"
-					:key="k"
-					:value="k"
-					:disabled="!instrumentEnabled(k)"
-				>{{ config.instruments[k].name() }}{{ !instrumentEnabled(k) ? ' (–)' : '' }}</option>
-			</select>
-		</div>
+		<select id="bb-trainer-instrument-select" class="form-select form-select-sm bb-trainer-instrument-picker" :aria-label="i18n.t('trainer.toolbar.instrument')" :value="instrument" @change="emit('update:instrument', ($event.target as HTMLSelectElement).value as Instrument)">
+			<option
+				v-for="k in config.instrumentKeys"
+				:key="k"
+				:value="k"
+				:disabled="!instrumentEnabled(k)"
+			>{{ config.instruments[k].name() }}{{ !instrumentEnabled(k) ? ' (–)' : '' }}</option>
+		</select>
 
 		<div class="btn-group" role="group">
 			<input type="radio" class="btn-check" id="mode-instr" :checked="mode === 'instrument'" @change="emit('update:mode', 'instrument')">
@@ -78,10 +75,7 @@
 			<label class="btn btn-outline-secondary btn-sm" for="mode-band">{{ i18n.t("trainer.toolbar.modeBand") }}</label>
 		</div>
 
-		<span class="badge text-bg-secondary align-self-center" :title="i18n.t('trainer.difficulty.label')">{{ i18n.t(`trainer.difficulty.${difficulty}`) }}</span>
-		<span class="badge text-bg-secondary align-self-center" :title="i18n.t('trainer.speed.label')">{{ speedBpm }} BPM</span>
-
-		<HybridPopoverButton variant="secondary" :title="i18n.t('trainer.settings.title')">
+		<HybridPopoverButton variant="outline-secondary" :title="i18n.t('trainer.settings.title')" class="btn-sm">
 			<template #button><fa icon="cog" /></template>
 			<SpeedSlider :modelValue="speedBpm" :defaultSpeed="pattern?.speed ?? config.defaultSpeed" @update:modelValue="emit('update:speedBpm', $event)" />
 			<LatencySlider class="mt-2" :modelValue="latencyMs" @update:modelValue="emit('update:latencyMs', $event)" @calibrate="emit('calibrate')" />
@@ -100,13 +94,10 @@
 		background: var(--bs-tertiary-bg);
 		border-bottom: 1px solid var(--bs-border-color);
 
-		@media (max-width: 575.98px) {
-			gap: 6px;
-		}
+		// Wrap order: Start always first, ⚙ popover always last.
+		// Middle children (instrument select, mode toggle) wrap between them.
+		> :first-child { order: -1; }
+		> :last-child  { order:  1; }
 	}
-	.bb-trainer-instrument-picker {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
+	.bb-trainer-instrument-picker { width: auto; }
 </style>
