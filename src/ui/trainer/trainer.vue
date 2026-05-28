@@ -6,7 +6,7 @@
 	import { useI18n } from "../../services/i18n";
 	import { getTuneOfTheYear } from "../../services/utils";
 	import { stopAllPlayers } from "../../services/player";
-	import { Instrument } from "../../config";
+	import config, { Instrument } from "../../config";
 	import type { TrainerMode } from "../../services/trainerEngine";
 	import { createTrainerEngine } from "../../services/trainerEngine";
 	import { createMicPermission } from "../../services/mediaPermissions";
@@ -71,6 +71,7 @@
 	const mode = ref<TrainerMode>("instrument");
 	const latencyMs = ref(0);
 	const difficulty = ref<Difficulty>("easy");
+	const speedBpm = ref(config.defaultSpeed);
 	const calibrationOpen = ref(false);
 	const permissionOpen = ref(false);
 	const headphonesOpen = ref(false);
@@ -98,12 +99,22 @@
 
 	const trainerState = computed(() => engine.state.value);
 
-	watch([currentPattern, instrument, mode, () => currentPattern.value?.speed, difficulty], () => {
+	// Keep-if-overridden sync: on pattern/tune change, follow the new pattern's default ONLY IF
+	// the user hasn't overridden speed (i.e. it still equals the previous pattern's default).
+	// Mirrors src/ui/listen/tune-info.vue:47-53. MUST be declared before the configure watcher
+	// so Vue runs it first in the same flush, ensuring engine.configure() sees the updated value.
+	watch(currentPattern, (newPat, oldPat) => {
+		if (!newPat) return;
+		const prevDefault = oldPat?.speed ?? config.defaultSpeed;
+		if (speedBpm.value === prevDefault) speedBpm.value = newPat.speed;
+	}, { immediate: true });
+
+	watch([currentPattern, instrument, mode, speedBpm, difficulty], () => {
 		if (currentPattern.value && instrument.value) {
 			engine.configure({
 				pattern: currentPattern.value,
 				instrument: instrument.value,
-				speedBpm: currentPattern.value.speed,
+				speedBpm: speedBpm.value,
 				mode: mode.value,
 				difficulty: difficulty.value,
 			});
@@ -229,6 +240,7 @@
 					v-model:mode="mode"
 					v-model:latencyMs="latencyMs"
 					v-model:difficulty="difficulty"
+					v-model:speedBpm="speedBpm"
 					:state="trainerState"
 					:disabled="!hasHits"
 					@start="handleStart"
