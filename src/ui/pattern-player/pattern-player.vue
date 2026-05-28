@@ -42,9 +42,11 @@
 		readonly?: boolean;
 		onlyInstrument?: Instrument;
 		hidePlaybackControls?: boolean;
+		multiLineWhenNarrow?: boolean;
 	}>(), {
 		readonly: false,
-		hidePlaybackControls: false
+		hidePlaybackControls: false,
+		multiLineWhenNarrow: false
 	});
 
 	const i18n = useI18n();
@@ -66,6 +68,24 @@
 	const originalPattern = computed(() => defaultTunes.getPattern(props.tuneName, props.patternName));
 
 	const upbeatBeats = computed(() => Math.ceil(pattern.value.upbeat / pattern.value.time));
+
+	// In multi-line mode, decompose strokes into [upbeat-or-empty, measure1, measure2, …, measureN].
+	// Measure 0 contains the upbeat cells (length = pattern.upbeat) — joined to measure 1 visually.
+	// Other measures each contain pattern.time cells.
+	const measures = computed(() => {
+		const out: { startStrokeIdx: number; cellCount: number }[] = [];
+		// First measure absorbs the upbeat
+		const firstCells = pattern.value.upbeat + pattern.value.time;
+		out.push({ startStrokeIdx: 0, cellCount: firstCells });
+		// Remaining measures
+		for (let m = 1; m < pattern.value.length; m++) {
+			out.push({
+				startStrokeIdx: pattern.value.upbeat + m * pattern.value.time,
+				cellCount: pattern.value.time
+			});
+		}
+		return out;
+	});
 
 	const containerRef = ref<HTMLElement>();
 	const abstractPlayerRef = ref<InstanceType<typeof AbstractPlayer>>();
@@ -239,8 +259,8 @@
 			<button v-if="hasLocalChanges" type="button" class="btn btn-warning" @click="reset()"><fa icon="eraser"/>{{" "}}{{i18n.t("pattern-player.restore")}}</button>
 		</PatternPlayerToolbar>
 
-		<div class="bb-pattern-player-container" ref="containerRef">
-			<table class="bb-pattern-player" :class="`time-${pattern.time}`">
+		<div class="bb-pattern-player-container" :class="{ 'multi-line-when-narrow': props.multiLineWhenNarrow }" ref="containerRef">
+			<table v-if="!props.multiLineWhenNarrow" class="bb-pattern-player" :class="`time-${pattern.time}`">
 				<thead>
 					<tr>
 						<td :colspan="hidePlaybackControls ? 1 : 2" :class="{ 'instrument-operations': !hidePlaybackControls }">
@@ -272,6 +292,42 @@
 				</tbody>
 			</table>
 
+			<div v-else class="bb-pattern-player-measures">
+				<table v-for="(measure, mIdx) in measures" :key="mIdx" class="bb-pattern-player bb-pattern-player-measure" :class="`time-${pattern.time}`">
+					<thead>
+						<tr>
+							<td :colspan="hidePlaybackControls ? 1 : 2" :class="{ 'instrument-operations': !hidePlaybackControls }">
+								<MuteButton v-if="mIdx === 0 && !hidePlaybackControls" instrument="all" v-model:playbackSettings="playbackSettings"/>
+							</td>
+							<template v-if="mIdx === 0 && pattern.upbeat > 0">
+								<td v-for="i in upbeatBeats" :key="`up-${i}`" :colspan="i == 1 ? (pattern.upbeat-1) % pattern.time + 1 : pattern.time" class="beat" :class="getBeatClass(i-1 - upbeatBeats)" @click="setPosition($event)"><span>{{i - upbeatBeats}}</span></td>
+							</template>
+							<td :colspan="pattern.time" class="beat" :class="getBeatClass(mIdx)" @click="setPosition($event)"><span>{{mIdx + 1}}</span></td>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="instrumentKey in visibleInstrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
+							<th>{{config.instruments[instrumentKey].name()}}</th>
+							<td class="instrument-operations" v-if="!hidePlaybackControls">
+								<HeadphonesButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
+								<MuteButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
+							</td>
+							<td v-for="i in measure.cellCount" :key="i" class="stroke" :class="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" v-tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''">
+								<span v-if="readonly" class="stroke-inner">{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}</span>
+								<a v-if="!readonly"
+									href="javascript:" class="stroke-inner"
+									:id="`bb-pattern-player-stroke-${instrumentKey}-${measure.startStrokeIdx + i - 1}`"
+									@click="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)"
+									draggable="false"
+								>
+									{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}
+								</a>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
 			<AbstractPlayer
 				:player="playerRef"
 				:rawPattern="rawPattern"
@@ -297,6 +353,26 @@
 		overflow-x: auto;
 		padding: 1em 0;
 		position: relative;
+
+		// Multi-line mode: each measure is its own table, wrapped in a flex container.
+		// flex-wrap lets the browser handle wrap thresholds — no JS width measurement.
+		&.multi-line-when-narrow {
+			.bb-pattern-player-measures {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				align-items: flex-start;
+			}
+			.bb-pattern-player-measure {
+				// Each measure-table sizes naturally; flex-wrap acts on it as a unit.
+				flex: 0 0 auto;
+			}
+			// Hide the sweep marker overlay — the per-beat .beat.active highlight already
+			// provides position feedback, and the overlay's x-position assumes a single table.
+			.bb-position-marker {
+				display: none !important;
+			}
+		}
 
 		.bb-pattern-player {
 			table-layout: fixed;

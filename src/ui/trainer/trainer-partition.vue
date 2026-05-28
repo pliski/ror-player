@@ -32,12 +32,14 @@
 
 <template>
 	<div class="bb-trainer-partition" ref="containerRef">
-		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" hidePlaybackControls />
+		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" hidePlaybackControls multiLineWhenNarrow />
 	</div>
 </template>
 
 <style lang="scss">
 	.bb-trainer-partition {
+		padding-left: 12px;
+
 		.bb-pattern-editor-toolbar {
 			display: none;
 		}
