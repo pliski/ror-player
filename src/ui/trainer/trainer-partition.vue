@@ -19,10 +19,11 @@
 		el.querySelectorAll(".stroke.verdict-good, .stroke.verdict-off, .stroke.verdict-miss")
 			.forEach((n) => n.classList.remove("verdict-good", "verdict-off", "verdict-miss"));
 		if (!props.verdicts) return;
-		const row = el.querySelector(`tr[data-instrument="${props.instrument}"]`);
-		if (!row) return;
 		for (const [strokeIdx, v] of props.verdicts) {
-			const cell = row.querySelector(`.stroke-i-${strokeIdx}`);
+			// Descendant selector traverses all measure-table rows for this instrument
+			// (multi-line mode has N rows; single-line has 1). Stroke classes are globally
+			// unique so the matching cell is found regardless of which measure-table it's in.
+			const cell = el.querySelector(`tr[data-instrument="${props.instrument}"] .stroke-i-${strokeIdx}`);
 			if (cell) cell.classList.add(`verdict-${v}`);
 		}
 	}

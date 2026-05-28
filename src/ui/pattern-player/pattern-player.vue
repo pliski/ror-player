@@ -296,7 +296,7 @@
 				<table v-for="(measure, mIdx) in measures" :key="mIdx" class="bb-pattern-player bb-pattern-player-measure" :class="`time-${pattern.time}`">
 					<thead>
 						<tr>
-							<td :colspan="hidePlaybackControls ? 1 : 2" :class="{ 'instrument-operations': !hidePlaybackControls }">
+							<td v-if="mIdx === 0 || !hidePlaybackControls" :colspan="hidePlaybackControls ? 1 : (mIdx === 0 ? 2 : 1)" :class="{ 'instrument-operations': !hidePlaybackControls }">
 								<MuteButton v-if="mIdx === 0 && !hidePlaybackControls" instrument="all" v-model:playbackSettings="playbackSettings"/>
 							</td>
 							<template v-if="mIdx === 0 && pattern.upbeat > 0">
@@ -307,7 +307,7 @@
 					</thead>
 					<tbody>
 						<tr v-for="instrumentKey in visibleInstrumentKeys" :key="instrumentKey" v-bind="{ 'data-instrument': instrumentKey }">
-							<th>{{config.instruments[instrumentKey].name()}}</th>
+							<th v-if="mIdx === 0">{{config.instruments[instrumentKey].name()}}</th>
 							<td class="instrument-operations" v-if="!hidePlaybackControls">
 								<HeadphonesButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 								<MuteButton v-if="mIdx === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
@@ -360,7 +360,7 @@
 			.bb-pattern-player-measures {
 				display: flex;
 				flex-wrap: wrap;
-				gap: 8px;
+				gap: 8px 0;
 				align-items: flex-start;
 			}
 			.bb-pattern-player-measure {
