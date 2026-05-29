@@ -232,7 +232,7 @@
 		},
 		"score": {
 			"title": "Score",
-			"avgDelta": "avg |Δ|",
+			"avgDelta": "Timing",
 			"drift": "drift",
 			"hits": "hits",
 			"misses": "misses",
@@ -240,6 +240,7 @@
 			"behind": "behind",
 			"early": "early",
 			"details": "Details",
+			"sessionTotals": "Session totals",
 			"idle": "Press ▶ to begin"
 		},
 		"mic": {
