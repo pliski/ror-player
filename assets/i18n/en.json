@@ -233,13 +233,12 @@
 		"score": {
 			"title": "Score",
 			"avgDelta": "Timing",
-			"drift": "drift",
-			"hits": "hits",
-			"misses": "misses",
-			"extras": "extras",
+			"drift": "Drift",
+			"hits": "Hits",
+			"misses": "Misses",
+			"extras": "Extras",
 			"behind": "behind",
 			"early": "early",
-			"details": "Details",
 			"sessionTotals": "Session totals",
 			"idle": "Press ▶ to begin"
 		},

@@ -61,10 +61,9 @@
 			<div class="bb-trainer-spacer"></div>
 
 			<button type="button" class="bb-trainer-details-toggle" :aria-expanded="detailsOpen" @click="detailsOpen = !detailsOpen">
-				<fa icon="caret-down" class="caret" :class="{ open: detailsOpen }" /> {{ i18n.t("trainer.score.details") }}
+				<fa icon="caret-down" class="caret" :class="{ open: detailsOpen }" /> {{ i18n.t("trainer.score.sessionTotals") }}
 			</button>
 			<div v-if="detailsOpen" class="bb-trainer-details">
-				<div class="bb-trainer-details-caption">{{ i18n.t("trainer.score.sessionTotals") }}</div>
 				<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.avgDelta") }}</span><strong>±{{ Math.round(props.stats.meanAbsDelta) }} ms</strong></div>
 				<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.drift") }}</span><strong>{{ props.stats.drift > 0 ? "+" : "" }}{{ Math.round(props.stats.drift) }} ms</strong></div>
 				<div class="bb-trainer-stat"><span>{{ i18n.t("trainer.score.hits") }}</span><strong>{{ props.stats.hits }}</strong></div>
@@ -171,10 +170,6 @@
 		.caret:not(.open) { transform: rotate(-90deg); }
 	}
 	.bb-trainer-details { display: flex; flex-direction: column; gap: 4px; }
-	.bb-trainer-details-caption {
-		font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-		color: var(--bs-secondary-color); margin-bottom: 2px;
-	}
 	.bb-trainer-stat { display: flex; justify-content: space-between; font-size: 12px; }
 	.bb-trainer-status {
 		display: flex;
