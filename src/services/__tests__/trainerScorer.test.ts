@@ -282,3 +282,62 @@ test("toleranceForDifficulty scales DEFAULT_TOLERANCE per level", () => {
   expect(toleranceForDifficulty("easy")).toEqual({ good: 105, off: 263 }); // ×1.75, rounded
   expect(toleranceForDifficulty("hard")).toEqual({ good: 36, off: 90 });   // ×0.6
 });
+
+// Live stats are monotonic: a stroke is only counted once its timing window has
+// closed (t <= elapsed - windowMs). windowMs = 200 for DEFAULT_TOLERANCE.
+const monoTimeline = {
+  expected: [
+    { strokeIdx: 0, t: 0 },
+    { strokeIdx: 1, t: 100 },
+    { strokeIdx: 2, t: 200 },
+    { strokeIdx: 3, t: 300 },
+  ],
+  loopLengthMs: 400,
+  toleranceMs: DEFAULT_TOLERANCE,
+};
+
+test("live stats: not-yet-reached strokes are not counted as misses", () => {
+  const s = createScorer(monoTimeline);
+  // elapsed 100 → cutoff = 100 - 200 = -100 → no stroke window closed yet.
+  const st = s.stats({ currentLoopElapsedMs: 100 });
+  expect(st.misses).toBe(0);
+  expect(st.expectedTotal).toBe(0);
+});
+
+test("live stats: a stroke becomes a miss only after its window closes", () => {
+  const s = createScorer(monoTimeline);
+  // elapsed 250 → cutoff = 50 → only stroke t=0 is closed; nothing played → 1 miss.
+  const st = s.stats({ currentLoopElapsedMs: 250 });
+  expect(st.expectedTotal).toBe(1);
+  expect(st.misses).toBe(1);
+  expect(st.hits).toBe(0);
+});
+
+test("live stats: a played stroke counts as a hit once its window closes", () => {
+  const s = createScorer(monoTimeline);
+  s.acceptHit({ t: 0, energy: 1 }); // on stroke 0 → good
+  const st = s.stats({ currentLoopElapsedMs: 250 }); // cutoff 50 → stroke 0 closed
+  expect(st.hits).toBe(1);
+  expect(st.misses).toBe(0);
+  expect(st.expectedTotal).toBe(1);
+});
+
+test("live stats: misses are monotonic and do not jump at a loop wrap", () => {
+  const s = createScorer(monoTimeline);
+  const m1 = s.stats({ currentLoopElapsedMs: 250 }).misses; // cutoff 50  → stroke 0 closed → 1
+  const m2 = s.stats({ currentLoopElapsedMs: 550 }).misses; // cutoff 350 → all 4 closed   → 4
+  s.onLoopWrap();                                            // loop 1 (no hits) locks 4 misses
+  const m3 = s.stats({ currentLoopElapsedMs: 50 }).misses;  // new loop cutoff -150 → 0 closed
+  expect(m1).toBeLessThanOrEqual(m2);
+  expect(m2).toBeLessThanOrEqual(m3);
+  expect(m3).toBe(4); // completed loop's 4 only; new loop adds nothing yet (was 8 before the fix)
+});
+
+test("live stats: absent elapsed counts the whole current loop (regression guard)", () => {
+  const s = createScorer(monoTimeline);
+  s.acceptHit({ t: 0, energy: 1 }); // matches stroke 0
+  const st = s.stats(); // no opts → legacy behaviour: match against the full timeline
+  expect(st.hits).toBe(1);
+  expect(st.misses).toBe(3); // strokes 1,2,3 unmatched
+  expect(st.expectedTotal).toBe(4);
+});

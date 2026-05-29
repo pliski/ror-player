@@ -179,7 +179,7 @@ export interface ScorerHandle {
   acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } | null;
   onLoopWrap(): void;
   finalize(opts?: { stopAtMs: number; tailMs: number }): void;
-  stats(): SessionStats;
+  stats(opts?: { currentLoopElapsedMs?: number | null }): SessionStats;
 }
 
 export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
@@ -243,16 +243,27 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
 
       finalMatch = merged;
     },
-    stats() {
+    stats(opts) {
       if (!finalized) {
-        // Approximate live stats by running matchHits on completed loops + current loop.
+        // Completed loops played to completion — counted in full.
         const merged: MatchResult = { matched: [], misses: [], extras: [] };
-        for (const loopDet of [...completedLoops, currentLoopDetected]) {
+        for (const loopDet of completedLoops) {
           const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs);
           merged.matched.push(...r.matched);
           merged.misses.push(...r.misses);
           merged.extras.push(...r.extras);
         }
+        // In-progress loop: only judge strokes whose window has fully closed, so a
+        // not-yet-reached stroke is never prematurely a miss. Absent elapsed (e.g.
+        // not in gameOn) → legacy behaviour: match against the full timeline.
+        const elapsed = opts?.currentLoopElapsedMs ?? null;
+        const currentExpected = elapsed === null
+          ? timeline.expected
+          : timeline.expected.filter((e) => e.t <= elapsed - windowMs);
+        const rCur = matchHits(currentLoopDetected, currentExpected, windowMs, timeline.toleranceMs);
+        merged.matched.push(...rCur.matched);
+        merged.misses.push(...rCur.misses);
+        merged.extras.push(...rCur.extras);
         return scoreSession(merged, timeline.toleranceMs);
       }
       return scoreSession(finalMatch, timeline.toleranceMs);
