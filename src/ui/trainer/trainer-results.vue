@@ -16,9 +16,9 @@
 			<div class="bb-trainer-results-headline">{{ stats.headlineScore }}</div>
 			<table class="table table-sm mt-2">
 				<tbody>
-					<tr><th>{{ i18n.t("trainer.score.avgDelta") }}</th><td>{{ Math.round(stats.meanAbsDelta) }} ms</td></tr>
+					<tr><th>{{ i18n.t("trainer.score.avgDelta") }}</th><td>±{{ Math.round(stats.meanAbsDelta) }} ms</td></tr>
 					<tr><th>{{ i18n.t("trainer.score.drift") }}</th><td>{{ stats.drift > 0 ? "+" : "" }}{{ Math.round(stats.drift) }} ms</td></tr>
-					<tr><th>{{ i18n.t("trainer.score.hits") }}</th><td>{{ stats.hits }} / {{ stats.expectedTotal }}</td></tr>
+					<tr><th>{{ i18n.t("trainer.score.hits") }}</th><td>{{ stats.hits }}</td></tr>
 					<tr><th>{{ i18n.t("trainer.score.misses") }}</th><td>{{ stats.misses }}</td></tr>
 					<tr><th>{{ i18n.t("trainer.score.extras") }}</th><td>{{ stats.extras }}</td></tr>
 				</tbody>
