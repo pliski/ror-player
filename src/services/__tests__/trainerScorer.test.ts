@@ -324,10 +324,10 @@ test("live stats: a played stroke counts as a hit once its window closes", () =>
 
 test("live stats: misses are monotonic and do not jump at a loop wrap", () => {
   const s = createScorer(monoTimeline);
-  const m1 = s.stats({ currentLoopElapsedMs: 250 }).misses; // cutoff 50  → stroke 0 closed → 1
-  const m2 = s.stats({ currentLoopElapsedMs: 550 }).misses; // cutoff 350 → all 4 closed   → 4
-  s.onLoopWrap();                                            // loop 1 (no hits) locks 4 misses
-  const m3 = s.stats({ currentLoopElapsedMs: 50 }).misses;  // new loop cutoff -150 → 0 closed
+  const m1 = s.stats({ currentLoopElapsedMs: 250 }).misses; // cutoff 50  → stroke t=0 closed → 1
+  const m2 = s.stats({ currentLoopElapsedMs: 399 }).misses; // cutoff 199 → strokes t=0,100 closed → 2 (loop tail not judged live yet)
+  s.onLoopWrap();                                            // loop 1 completes → its full 4 strokes (no hits) lock as misses
+  const m3 = s.stats({ currentLoopElapsedMs: 50 }).misses;  // new loop cutoff -150 → 0 closed; completed loop contributes 4
   expect(m1).toBeLessThanOrEqual(m2);
   expect(m2).toBeLessThanOrEqual(m3);
   expect(m3).toBe(4); // completed loop's 4 only; new loop adds nothing yet (was 8 before the fix)
