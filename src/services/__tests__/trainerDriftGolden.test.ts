@@ -85,7 +85,13 @@ async function runSession(
   await engine.advanceToGameOn(BASELINE); // → gameOn with an explicit loop baseline
 
   for (const t of feedTimes) onsetSub!({ t_perf: t, energy: 0.5 });
-  return engine.stats();
+  // The session uses a synthetic loop baseline (BASELINE), so make "now" consistent
+  // with it — far enough past it that every stroke's scoring window has closed and
+  // live stats match the full expected timeline.
+  const nowSpy = vi.spyOn(performance, "now").mockReturnValue(BASELINE + 10_000_000);
+  const result = engine.stats();
+  nowSpy.mockRestore();
+  return result;
 }
 
 // Physics model: one perf-time onset per expected hit. The player strikes at the

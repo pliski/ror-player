@@ -266,7 +266,9 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
   }
 
   function stats(): SessionStats {
-    return scorer?.stats() ?? { hits: 0, misses: 0, extras: 0, expectedTotal: 0, meanAbsDelta: 0, drift: 0, headlineScore: 100 };
+    const currentLoopElapsedMs = loopBaselinePerf === null ? null : performance.now() - loopBaselinePerf;
+    return scorer?.stats({ currentLoopElapsedMs })
+      ?? { hits: 0, misses: 0, extras: 0, expectedTotal: 0, meanAbsDelta: 0, drift: 0, headlineScore: 100 };
   }
 
   function debugLoopBaseline(): number | null { return loopBaselinePerf; }
