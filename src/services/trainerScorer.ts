@@ -291,17 +291,18 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
           merged.misses.push(...r.misses);
           merged.extras.push(...r.extras);
         }
-        // In-progress loop: only judge strokes whose window has fully closed, so a
-        // not-yet-reached stroke is never prematurely a miss. Absent elapsed (e.g.
-        // not in gameOn) → legacy behaviour: match against the full timeline.
+        // In-progress loop: match against the FULL timeline so a just-landed on-time hit binds
+        // to its stroke immediately (matching a filtered subset would brand it a fleeting "extra"
+        // until its window closed — the counter flicker). The elapsed cutoff is then applied only
+        // to MISSES, so a not-yet-reached stroke is still never prematurely counted as missed.
+        // Absent elapsed (e.g. not in gameOn) → legacy behaviour: count the whole loop.
         const elapsed = opts?.currentLoopElapsedMs ?? null;
-        const currentExpected = elapsed === null
-          ? timeline.expected
-          : timeline.expected.filter((e) => e.t <= elapsed - windowMs);
-        const rCur = matchHits(currentLoopDetected, currentExpected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
+        const rCur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
         merged.matched.push(...rCur.matched);
-        merged.misses.push(...rCur.misses);
         merged.extras.push(...rCur.extras);
+        merged.misses.push(...(elapsed === null
+          ? rCur.misses
+          : rCur.misses.filter((e) => e.t <= elapsed - windowMs)));
         return scoreSession(merged, timeline.toleranceMs);
       }
       return scoreSession(finalMatch, timeline.toleranceMs);

@@ -385,6 +385,21 @@ test("live stats: misses are monotonic and do not jump at a loop wrap", () => {
   expect(m3).toBe(4); // completed loop's 4 only; new loop adds nothing yet (was 8 before the fix)
 });
 
+test("live stats: an on-time hit is not transiently counted as an extra (no flicker)", () => {
+  // windowMs = 200. Hit stroke 1 (t=1000) on time, then poll while elapsed ≈ 1000 — stroke 1's
+  // window [800,1200] hasn't closed yet. The hit must read as a hit, never a fleeting extra.
+  const timeline = {
+    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 1000 }],
+    loopLengthMs: 2000,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  s.acceptHit({ t: 1000, energy: 1 });
+  const st = s.stats({ currentLoopElapsedMs: 1000 });
+  expect(st.extras).toBe(0);
+  expect(st.hits).toBe(1);
+});
+
 test("live stats: absent elapsed counts the whole current loop (regression guard)", () => {
   const s = createScorer(monoTimeline);
   s.acceptHit({ t: 0, energy: 1 }); // matches stroke 0
