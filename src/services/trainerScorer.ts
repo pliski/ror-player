@@ -100,12 +100,44 @@ function classifyDelta(delta: number, tolerance: { good: number; off: number }):
   return Math.abs(delta) <= tolerance.good ? "good" : "off";
 }
 
+/**
+ * Signed shortest-path delta between a hit and an expected stroke on the loop *circle*
+ * (+ = late, − = early), in the range (−loopLen/2, loopLen/2]. Loop time wraps at the
+ * downbeat (0 ≡ loopLen), so a hit a hair *before* the downbeat arrives as ≈loopLen after
+ * the engine's modulo; this folds it back to a small negative instead of a near-full-loop gap.
+ */
+function circularDelta(hitT: number, expT: number, loopLen: number): number {
+  const d = (((hitT - expT) % loopLen) + loopLen) % loopLen; // [0, loopLen)
+  return d > loopLen / 2 ? d - loopLen : d;
+}
+
 export function matchHits(
   detected: DetectedHit[],
   expected: ExpectedHit[],
   windowMs: number,
   tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
+  loopLengthMs?: number,
 ): MatchResult {
+  // When the loop length is known, treat time as circular: a hit whose shortest path to its
+  // nearest expected wraps across the downbeat boundary is "unwrapped" (shifted by ±loopLen)
+  // so the linear walking-pointer below sees it sitting beside that expected. This rescues
+  // slightly-early downbeats, which the engine's modulo lands at ≈loopLen.
+  if (loopLengthMs !== undefined && expected.length > 0) {
+    detected = detected
+      .map((d) => {
+        let nearest = expected[0];
+        let bestAbs = Infinity;
+        for (const e of expected) {
+          const abs = Math.abs(circularDelta(d.t, e.t, loopLengthMs));
+          if (abs < bestAbs) { bestAbs = abs; nearest = e; }
+        }
+        return Math.abs(d.t - nearest.t) > loopLengthMs / 2
+          ? { ...d, t: nearest.t + circularDelta(d.t, nearest.t, loopLengthMs) }
+          : d;
+      })
+      .sort((a, b) => a.t - b.t);
+  }
+
   // Walking-pointer greedy nearest-neighbour. Both arrays MUST be time-sorted.
   const matched: MatchResult["matched"] = [];
   const misses: ExpectedHit[] = [];
@@ -196,13 +228,16 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
   function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } {
     let bestI = -1;
     let bestAbs = Infinity;
+    let bestDelta = 0;
     for (let i = 0; i < timeline.expected.length; i++) {
-      const d = Math.abs(timeline.expected[i].t - hit.t);
-      if (d < bestAbs) { bestAbs = d; bestI = i; }
+      // Circular delta: a hair-early downbeat lands at ≈loopLen but is really ≈0 from stroke 0.
+      const delta = circularDelta(hit.t, timeline.expected[i].t, timeline.loopLengthMs);
+      const abs = Math.abs(delta);
+      if (abs < bestAbs) { bestAbs = abs; bestI = i; bestDelta = delta; }
     }
     if (bestI < 0 || bestAbs > windowMs) return { verdict: "extra" };
     const v: "good" | "off" = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
-    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: hit.t - timeline.expected[bestI].t };
+    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: bestDelta };
   }
 
   return {
@@ -230,13 +265,13 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
       // Completed loops played to completion — match against full expected.
       const merged: MatchResult = { matched: [], misses: [], extras: [] };
       for (const loopDet of completedLoops) {
-        const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs);
+        const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
         merged.matched.push(...r.matched);
         merged.misses.push(...r.misses);
         merged.extras.push(...r.extras);
       }
       // Current (possibly trimmed) loop — match against trimmed expected.
-      const rFinal = matchHits(trimmedCurrentLoop, trimmedExpected, windowMs, timeline.toleranceMs);
+      const rFinal = matchHits(trimmedCurrentLoop, trimmedExpected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
       merged.matched.push(...rFinal.matched);
       merged.misses.push(...rFinal.misses);
       merged.extras.push(...rFinal.extras);
@@ -248,7 +283,7 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
         // Completed loops played to completion — counted in full.
         const merged: MatchResult = { matched: [], misses: [], extras: [] };
         for (const loopDet of completedLoops) {
-          const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs);
+          const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
           merged.matched.push(...r.matched);
           merged.misses.push(...r.misses);
           merged.extras.push(...r.extras);
@@ -260,7 +295,7 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
         const currentExpected = elapsed === null
           ? timeline.expected
           : timeline.expected.filter((e) => e.t <= elapsed - windowMs);
-        const rCur = matchHits(currentLoopDetected, currentExpected, windowMs, timeline.toleranceMs);
+        const rCur = matchHits(currentLoopDetected, currentExpected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
         merged.matched.push(...rCur.matched);
         merged.misses.push(...rCur.misses);
         merged.extras.push(...rCur.extras);

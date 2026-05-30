@@ -135,6 +135,33 @@ test("matchHits: extra detection before all expected", () => {
   expect(r.extras).toEqual(d);
 });
 
+test("matchHits: circular — early downbeat wrapping to the loop end matches stroke 0", () => {
+  // A 20ms-early downbeat is converted by the engine to tLoop = loopLen - 20 = 980.
+  // With a circular loop it must match stroke 0 (delta -20), not become a miss + extra.
+  const e = [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }];
+  const d = [{ t: 980, energy: 1 }];
+  const r = matchHits(d, e, 200, DEFAULT_TOLERANCE, 1000);
+  expect(r.matched).toHaveLength(1);
+  expect(r.matched[0].e.strokeIdx).toBe(0);
+  expect(r.matched[0].delta).toBe(-20);
+  expect(r.matched[0].verdict).toBe("good");
+  expect(r.misses).toHaveLength(1);   // stroke 1 (t=500) never hit
+  expect(r.misses[0].strokeIdx).toBe(1);
+  expect(r.extras).toEqual([]);
+});
+
+test("matchHits: circular — a late hit on a stroke near the loop end is NOT stolen by the wrap", () => {
+  // Dense pattern: last stroke at t=875 (loopLen 1000), window 200. A 40ms-late hit at 915 is
+  // nearer the last stroke (40) than the downbeat across the boundary (85) → must stay matched
+  // to the last stroke, not be pulled around to stroke 0.
+  const e = [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 875 }];
+  const d = [{ t: 915, energy: 1 }];
+  const r = matchHits(d, e, 200, DEFAULT_TOLERANCE, 1000);
+  expect(r.matched).toHaveLength(1);
+  expect(r.matched[0].e.t).toBe(875);
+  expect(r.matched[0].delta).toBe(40);
+});
+
 test("scoreSession: empty session", () => {
   const s = scoreSession({ matched: [], misses: [], extras: [] });
   expect(s).toEqual({
@@ -258,6 +285,18 @@ test("acceptHit returns a signed delta (late > 0, early < 0, on-time 0)", () => 
   expect(scorer.acceptHit({ t: 125, energy: 0.5 })).toMatchObject({ strokeIdx: 1, verdict: "good", delta: 0 });
   expect(scorer.acceptHit({ t: 140, energy: 0.5 })).toMatchObject({ delta: 15 });  // 15 ms late
   expect(scorer.acceptHit({ t: 110, energy: 0.5 })).toMatchObject({ delta: -15 }); // 15 ms early
+});
+
+test("acceptHit: a slightly-early downbeat (wrapped to the loop end) lights up stroke 0", () => {
+  // This is the live-verdict path that highlights the partition cell. The engine converts a
+  // 20ms-early downbeat to tLoop = loopLen - 20; bestGuess must attribute it to stroke 0.
+  const timeline = {
+    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }],
+    loopLengthMs: 1000,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  expect(s.acceptHit({ t: 980, energy: 1 })).toMatchObject({ strokeIdx: 0, verdict: "good", delta: -20 });
 });
 
 test("deltaToPosition: centre, zone boundary, edges, clamp, direction", () => {
