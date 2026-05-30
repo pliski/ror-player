@@ -188,22 +188,31 @@
 
 	const verdicts = ref<Map<number, Verdict>>(new Map());
 	const recentHits = ref<{ delta: number; verdict: Verdict }[]>([]);
+	// A downbeat hit a hair early matches the loop about to start, but its verdict can arrive
+	// just *before* the loop-wrap clear. The engine flags it `nextLoop`; we let that one stroke
+	// survive the next wrap so its highlight isn't wiped the instant it lands. A subsequent
+	// in-loop hit cancels the carry-over, so a normal loop still clears fully.
+	let carryStroke: number | null = null;
 
-	function handleVerdict(e: { strokeIdx: number; verdict: Verdict; delta: number }) {
+	function handleVerdict(e: { strokeIdx: number; verdict: Verdict; delta: number; nextLoop: boolean }) {
 		const next = new Map(verdicts.value);
 		next.set(e.strokeIdx, e.verdict);
 		verdicts.value = next;
 		recentHits.value = [...recentHits.value, { delta: e.delta, verdict: e.verdict }].slice(-5);
+		carryStroke = e.nextLoop ? e.strokeIdx : null;
 	}
 
 	function handleLoopWrap() {
-		verdicts.value = new Map();
+		const carried = carryStroke !== null ? verdicts.value.get(carryStroke) : undefined;
+		verdicts.value = carried !== undefined ? new Map([[carryStroke as number, carried]]) : new Map();
+		carryStroke = null;
 	}
 
 	watch(trainerState, (s, prev) => {
 		if (s === "countIn" && prev !== "countIn") {
 			verdicts.value = new Map();
 			recentHits.value = [];
+			carryStroke = null;
 		}
 	});
 

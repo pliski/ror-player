@@ -360,6 +360,32 @@ test("engine.off() removes the listener", async () => {
   expect(spy).not.toHaveBeenCalled();
 });
 
+test("verdict event flags an early downbeat (wrapped to loop end) as nextLoop", async () => {
+  const deps = makeDeps(true);
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+
+  // strokeMs 125, loopLen 500; strokes at t=0 (idx 0) and t=250 (idx 2).
+  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
+  await engine.start();
+
+  const spy = vi.fn();
+  engine.on("verdict", spy);
+
+  const baselinePerf = 1000;
+  await engine.advanceToGameOn(baselinePerf);
+
+  // 20ms before the downbeat → tLoop ≈ loopLen-20, matched to stroke 0 across the wrap.
+  onsetSub!({ t_perf: baselinePerf - 20, energy: 0.5 });
+  expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ strokeIdx: 0, nextLoop: true }));
+
+  // A plain in-loop hit on stroke 2 is not a boundary crossing.
+  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
+  expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ strokeIdx: 2, nextLoop: false }));
+});
+
 test("configure() during gameOn forces a reset to idle", async () => {
   const deps = makeDeps(true);
   const engine = createTrainerEngine(deps, makeDefaultOpts());

@@ -40,7 +40,7 @@ export interface TrainerEngineOpts {
 }
 
 export type TrainerEngineEvents = {
-  verdict: { strokeIdx: number; verdict: Verdict; delta: number };
+  verdict: { strokeIdx: number; verdict: Verdict; delta: number; nextLoop: boolean };
   loopWrap: object;
 } & Record<string, unknown>;
 
@@ -127,7 +127,10 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       const tLoop = ((tRel % loopLen) + loopLen) % loopLen;
       const verdict = scorer.acceptHit({ t: tLoop, energy: e.energy });
       if (verdict && "strokeIdx" in verdict) {
-        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict, delta: verdict.delta });
+        // An early hit matched across the loop boundary belongs to the loop about to start, so
+        // the UI must keep its highlight through the imminent loop-wrap clear (see trainer.vue).
+        const nextLoop = verdict.wrapped && verdict.delta < 0;
+        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict, delta: verdict.delta, nextLoop });
       }
     };
     deps.detector.on("onset", onsetHandler);

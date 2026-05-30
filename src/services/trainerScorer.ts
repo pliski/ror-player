@@ -208,7 +208,7 @@ export function scoreSession(
 }
 
 export interface ScorerHandle {
-  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } | null;
+  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number; wrapped: boolean } | { verdict: "extra" } | null;
   onLoopWrap(): void;
   finalize(opts?: { stopAtMs: number; tailMs: number }): void;
   stats(opts?: { currentLoopElapsedMs?: number | null }): SessionStats;
@@ -225,7 +225,7 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
   let finalMatch: MatchResult = { matched: [], misses: [], extras: [] };
   const windowMs = timeline.toleranceMs.off + 50;
 
-  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number } | { verdict: "extra" } {
+  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number; wrapped: boolean } | { verdict: "extra" } {
     let bestI = -1;
     let bestAbs = Infinity;
     let bestDelta = 0;
@@ -237,7 +237,10 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
     }
     if (bestI < 0 || bestAbs > windowMs) return { verdict: "extra" };
     const v: "good" | "off" = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
-    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: bestDelta };
+    // `wrapped` = the match was found across the loop boundary (raw hit and stroke are >½ loop
+    // apart). Lets the UI know this hit belongs to the loop on the *other* side of the wrap.
+    const wrapped = Math.abs(hit.t - timeline.expected[bestI].t) > timeline.loopLengthMs / 2;
+    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: bestDelta, wrapped };
   }
 
   return {

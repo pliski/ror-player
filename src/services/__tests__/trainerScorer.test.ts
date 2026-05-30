@@ -287,6 +287,19 @@ test("acceptHit returns a signed delta (late > 0, early < 0, on-time 0)", () => 
   expect(scorer.acceptHit({ t: 110, energy: 0.5 })).toMatchObject({ delta: -15 }); // 15 ms early
 });
 
+test("acceptHit: flags a boundary-crossing match as wrapped (and normal matches as not)", () => {
+  const timeline = {
+    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }],
+    loopLengthMs: 1000,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(timeline);
+  // Early downbeat parked at the loop end → matched stroke 0 across the boundary.
+  expect(s.acceptHit({ t: 980, energy: 1 })).toMatchObject({ strokeIdx: 0, delta: -20, wrapped: true });
+  // A normal in-loop hit does not wrap.
+  expect(s.acceptHit({ t: 510, energy: 1 })).toMatchObject({ strokeIdx: 1, delta: 10, wrapped: false });
+});
+
 test("acceptHit: a slightly-early downbeat (wrapped to the loop end) lights up stroke 0", () => {
   // This is the live-verdict path that highlights the partition cell. The engine converts a
   // 20ms-early downbeat to tLoop = loopLen - 20; bestGuess must attribute it to stroke 0.
