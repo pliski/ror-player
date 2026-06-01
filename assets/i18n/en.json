@@ -249,6 +249,7 @@
 		"toolbar": {
 			"start": "Start",
 			"stop": "Stop",
+			"part": "Part",
 			"instrument": "Instrument",
 			"modeInstrument": "Instrument",
 			"modeBand": "Band"

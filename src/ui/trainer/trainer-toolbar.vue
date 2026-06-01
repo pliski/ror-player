@@ -9,9 +9,12 @@
 	import LatencySlider from "./latency-slider.vue";
 	import DifficultySelector from "./difficulty-selector.vue";
 	import SpeedSlider from "./speed-slider.vue";
+	import type { PartOption } from "./trainerParts";
 
 	const props = defineProps<{
 		pattern: Pattern | undefined;
+		parts: PartOption[];
+		patternName: string;
 		instrument: Instrument;
 		mode: TrainerMode;
 		state: TrainerState;
@@ -22,6 +25,7 @@
 	}>();
 
 	const emit = defineEmits<{
+		"update:patternName": [v: string];
 		"update:instrument": [v: Instrument];
 		"update:mode": [v: TrainerMode];
 		"update:latencyMs": [v: number];
@@ -58,6 +62,10 @@
 		>
 			<fa :icon="isRunning ? 'stop' : 'play'" /> {{ buttonLabel }}
 		</button>
+
+		<select id="bb-trainer-part-select" class="form-select form-select-sm bb-trainer-part-picker" :aria-label="i18n.t('trainer.toolbar.part')" :value="patternName" @change="emit('update:patternName', ($event.target as HTMLSelectElement).value)">
+			<option v-for="p in parts" :key="p.key" :value="p.key">{{ p.label }}</option>
+		</select>
 
 		<select id="bb-trainer-instrument-select" class="form-select form-select-sm bb-trainer-instrument-picker" :aria-label="i18n.t('trainer.toolbar.instrument')" :value="instrument" @change="emit('update:instrument', ($event.target as HTMLSelectElement).value as Instrument)">
 			<option
@@ -100,4 +108,5 @@
 		> :last-child  { order:  1; }
 	}
 	.bb-trainer-instrument-picker { width: auto; }
+	.bb-trainer-part-picker { width: auto; }
 </style>
