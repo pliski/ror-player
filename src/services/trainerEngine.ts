@@ -269,7 +269,11 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
   }
 
   function stats(): SessionStats {
-    const currentLoopElapsedMs = loopBaselinePerf === null ? null : performance.now() - loopBaselinePerf;
+    // No baseline yet (count-in, or the brief gap before the main loop's "play" fires)
+    // means the scored loop hasn't started — 0 ms have elapsed, so no stroke window has
+    // closed and nothing can be missed. Passing null here instead would trip the scorer's
+    // "absent elapsed → count the whole loop" path and flash a full loop of phantom misses.
+    const currentLoopElapsedMs = loopBaselinePerf === null ? 0 : performance.now() - loopBaselinePerf;
     return scorer?.stats({ currentLoopElapsedMs })
       ?? { hits: 0, misses: 0, extras: 0, expectedTotal: 0, meanAbsDelta: 0, drift: 0, headlineScore: 100 };
   }

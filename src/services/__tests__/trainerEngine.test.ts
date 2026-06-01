@@ -80,6 +80,21 @@ test("start() transitions to requestingMic then countIn on grant", async () => {
   expect(deps.detector.start).toHaveBeenCalled();
 });
 
+test("stats during countIn reports zero misses (no loop baseline yet)", async () => {
+  // Regression for Bug: the score rail showed a full loop's worth of misses the
+  // instant a session started. During count-in loopBaselinePerf is still null, so
+  // the engine must report 0 elapsed (loop not started) — not "unknown", which the
+  // scorer treats as "count the whole loop". With no hits and no time elapsed,
+  // nothing can yet be missed.
+  const deps = makeDeps(true);
+  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  engine.configure(makeDefaultConfig()); // pattern has 2 strokes (X . X .)
+  await engine.start();
+  expect(engine.state.value).toBe("countIn");
+  expect(engine.stats().hits).toBe(0);
+  expect(engine.stats().misses).toBe(0);
+});
+
 test("start() denied returns to idle", async () => {
   const deps = makeDeps(false);
   const engine = createTrainerEngine(deps, makeDefaultOpts());
