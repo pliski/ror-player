@@ -27,7 +27,17 @@
   - **Why deferred:** real-world frequency is unmeasured — onset-detection latency likely makes the early hit land in the *correct* (next) bucket most of the time ("race won"). Need evidence before investing.
   - **Why it's not a scorer-only fix:** the engine's always-positive modulo at `trainerEngine.ts:127` collapses pre-wrap (`+980`) and post-wrap (`−20`) into the same `980`, destroying the info the scorer would need to tell "carry me forward" hits from "already correct" ones. A sound fix needs a companion engine change (preserve signed pre/post-wrap time) — see Session 11 analysis for options A (continuous-time loop assignment) / B (carry-forward + signed time) / C (global match).
 
+
+
 ## Maybe later
 
 - [ ] add an onboarding with the same infos.
 - [ ] add signs
+
+
+
+## new
+
+- training -->  practice
+- breaks??
+

@@ -222,11 +222,11 @@
 	"overview": {
 		"listen": "Listen",
 		"compose": "Compose",
-		"trainer": "Train"
+		"trainer": "Practice"
 	},
 	"trainer": {
-		"pick-tune": "Pick a tune from the sidebar to start training.",
-		"no-hits": "No strokes to train for this instrument.",
+		"pick-tune": "Pick a tune from the sidebar to start practicing.",
+		"no-hits": "No strokes to practice for this instrument.",
 		"results": {
 			"title": "Session results"
 		},
@@ -288,7 +288,7 @@
 		},
 		"permission": {
 			"title": "Use your microphone?",
-			"body": "To score your timing, the trainer listens to the microphone and compares what it hears with the partition.",
+			"body": "To score your timing, Practice listens to the microphone and compares what it hears with the partition.",
 			"privacy": "Audio is processed locally on your device and never leaves it.",
 			"cancel": "Cancel",
 			"enable": "Enable microphone"
@@ -300,7 +300,7 @@
 		},
 		"rotate": {
 			"title": "Rotate to landscape",
-			"hint": "The trainer needs the width to show your timing and the pattern together."
+			"hint": "Practice needs the width to show your timing and the pattern together."
 		}
 	},
 	"pattern-list-filter": {
