@@ -23,6 +23,7 @@
 	import TrainerPartition from "./trainer-partition.vue";
 	import TrainerScoreRail from "./trainer-score-rail.vue";
 	import TrainerToolbar from "./trainer-toolbar.vue";
+	import { listParts, resolvePartName } from "./trainerParts";
 
 	const props = defineProps<{
 		tuneName?: string;
@@ -59,12 +60,14 @@
 
 	const tune = computed(() => tuneName.value ? state.value.tunes[tuneName.value] : undefined);
 	const patternKeys = computed(() => tune.value ? Object.keys(tune.value.patterns) : []);
+	const parts = computed(() => listParts(tune.value));
 
-	// Auto-select first pattern when tune changes
+	// Keep a valid part selected when the tune changes: retain the current part if it
+	// still exists, otherwise fall back to "Tune" (or the tune's first part). This is
+	// what stops a stale pattern name from dangling when switching to a tune — such as
+	// the special break categories — that has no part with the previous name.
 	watch(patternKeys, () => {
-		if (!patternName.value || !patternKeys.value.includes(patternName.value)) {
-			patternName.value = patternKeys.value[0];
-		}
+		patternName.value = resolvePartName(patternKeys.value, patternName.value);
 	}, { immediate: true });
 
 	const instrument = ref<Instrument>("sn");
@@ -135,7 +138,7 @@
 
 	const s = settings.value;
 	if (!props.tuneName && s.lastTuneName) tuneName.value = s.lastTuneName;
-	if (!props.patternName && s.lastPatternName) patternName.value = s.lastPatternName;
+	if (!props.patternName) patternName.value = resolvePartName(patternKeys.value, s.lastPatternName);
 	if (s.lastInstrument) instrument.value = s.lastInstrument;
 	mode.value = s.lastMode;
 	latencyMs.value = s.latencyOffsetMs;
@@ -208,6 +211,20 @@
 		carryStroke = null;
 	}
 
+	// Switching the part clears the live feedback so the previous part's stroke
+	// highlights don't bleed onto the new part's notation. The running session itself
+	// is stopped by the `configure` watcher above: it re-runs engine.configure() when
+	// the pattern changes, which calls engine.stop(). That watcher is registered before
+	// this one, so on a part change it runs first and sets the engine to "idle" — which
+	// is why calling engine.stopGame() here would be a no-op (it early-returns unless
+	// the state is "gameOn"/"countIn"). The setup-time part assignments run before this
+	// watcher is registered, so they don't trigger a spurious clear.
+	watch(patternName, () => {
+		verdicts.value = new Map();
+		recentHits.value = [];
+		carryStroke = null;
+	});
+
 	watch(trainerState, (s, prev) => {
 		if (s === "countIn" && prev !== "countIn") {
 			verdicts.value = new Map();
@@ -255,6 +272,8 @@
 			<div v-if="tuneName && patternName" class="bb-trainer-pane">
 				<TrainerToolbar
 					:pattern="currentPattern"
+					:parts="parts"
+					v-model:patternName="patternName"
 					v-model:instrument="instrument"
 					v-model:mode="mode"
 					v-model:latencyMs="latencyMs"
@@ -266,7 +285,7 @@
 					@stop="handleStop"
 					@calibrate="handleCalibrate"
 				/>
-				<TrainerPartition :tuneName="tuneName" :patternName="patternName" :instrument="instrument" :verdicts="verdicts" />
+				<TrainerPartition v-if="currentPattern" :tuneName="tuneName" :patternName="patternName" :instrument="instrument" :verdicts="verdicts" />
 			</div>
 			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
 		</div>
