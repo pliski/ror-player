@@ -9,7 +9,7 @@
 <script setup lang="ts">
 	import config, { Instrument } from "../../config";
 	import { BeatboxReference, createBeatbox, patternToBeatbox } from "../../services/player";
-	import { patternEquals, updateStroke } from "../../state/pattern";
+	import { normalizePattern, patternEquals, updateStroke } from "../../state/pattern";
 	import { normalizePlaybackSettings, PlaybackSettings, updatePlaybackSettings } from "../../state/playbackSettings";
 	import { createPattern, getPatternFromState } from "../../state/state";
 	import { clone } from "../../utils";
@@ -35,6 +35,12 @@
 
 	const state = injectStateRequired();
 
+	// Stable empty-pattern fallback (see the `pattern` computed below). Hoisted out of
+	// the computed so the fallback path returns a consistent object identity instead of
+	// allocating a new pattern per recompute. normalizePattern({}) is a pure Zod parse —
+	// safe to evaluate once here.
+	const EMPTY_PATTERN = normalizePattern({});
+
 	const props = withDefaults(defineProps<{
 		player?: BeatboxReference;
 		tuneName: string;
@@ -55,7 +61,11 @@
 		props.onlyInstrument ? [props.onlyInstrument] : config.instrumentKeys
 	);
 
-	const pattern = computed(() => getPatternFromState(state.value, props.tuneName, props.patternName)!);
+	// Fall back to a shared empty normalized pattern if the tune/part combo doesn't
+	// resolve (e.g. a transiently stale pattern name). Keeps the render pure instead of
+	// throwing on `pattern.value.length`. Valid callers (Listen/Compose) always resolve
+	// a real pattern, so this fallback is inert for them.
+	const pattern = computed(() => getPatternFromState(state.value, props.tuneName, props.patternName) ?? EMPTY_PATTERN);
 
 	const playerRef = ref<BeatboxReference>(props.player || createBeatbox(true));
 	const playbackSettings = ref<PlaybackSettings>({
