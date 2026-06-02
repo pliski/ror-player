@@ -91,6 +91,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
   let loopBaselinePerf: number | null = null;
   let loopLengthMs = 0; // current session's loop length (ms); set when the scorer/timeline is built
   let onsetHandler: ((e: { t_perf: number; energy: number }) => void) | null = null;
+  let detachMainListeners: (() => void) | null = null; // removes the main player's play/beat handlers on teardown
 
   let countIn: { ref: BeatboxReference; player: Beatbox } | null = null;
   let main: { ref: BeatboxReference; player: Beatbox } | null = null;
@@ -147,6 +148,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       deps.detector.off("onset", onsetHandler);
       onsetHandler = null;
     }
+    if (detachMainListeners) { detachMainListeners(); detachMainListeners = null; }
     if (countIn) { void countIn.player.stop(); countIn = null; }
     if (main)    { void main.player.stop();    main    = null; }
     scorer = null;
@@ -175,16 +177,24 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     // loop boundary ~15ms in and pushed a full empty loop of phantom misses into the scorer. A
     // real wrap is one loopLengthMs after the baseline — detect it from elapsed time, re-anchoring
     // the baseline each loop so per-beat jitter can't accumulate.
-    mainPlayer.on("play", () => {
+    const onPlay = () => {
       loopBaselinePerf = now();
-    });
-    mainPlayer.on("beat", () => {
+    };
+    const onBeat = () => {
       if (loopBaselinePerf !== null && now() - loopBaselinePerf >= loopLengthMs) {
         loopBaselinePerf = now();
         scorer?.onLoopWrap();
         events.emit("loopWrap", {});
       }
-    });
+    };
+    mainPlayer.on("play", onPlay);
+    mainPlayer.on("beat", onBeat);
+    // teardown() removes these so a late beat from this player's closing AudioContext can't reach
+    // a *later* session's scorer (both handlers close over the module-level scorer/baseline).
+    detachMainListeners = () => {
+      mainPlayer.off("play", onPlay);
+      mainPlayer.off("beat", onBeat);
+    };
     mainPlayer.play();
 
     state.value = "gameOn";

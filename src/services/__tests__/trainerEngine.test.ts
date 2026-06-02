@@ -22,7 +22,7 @@ function makeFakeBeatbox(): { ref: BeatboxReference; player: Beatbox } {
     on: vi.fn(),
     play: vi.fn(),
     stop: vi.fn(),
-    getPosition: vi.fn(() => 0),
+    off: vi.fn(),
   } as unknown as Beatbox;
   const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
   return { ref, player };
@@ -298,7 +298,7 @@ function makePositionedBeatboxFactory() {
       on: vi.fn((ev: keyof Handlers, cb: never) => { handlers[ev] = cb; }),
       play: vi.fn(),
       stop: vi.fn(),
-      getPosition: vi.fn(() => 0),
+      off: vi.fn(),
     } as unknown as Beatbox;
     const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
     beatboxes.push({ handlers, player, ref });
@@ -386,6 +386,27 @@ test("re-anchors the baseline after a wrap so it fires once per loop, not on eve
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
   mockNow = 2000; beatboxes[1].handlers.beat?.(0);
   expect(loopWrapSpy).toHaveBeenCalledTimes(2); // next loop boundary → wrap #2
+});
+
+test("stop() detaches the main player's listeners so a stale beat can't reach a later session's scorer", async () => {
+  // Hygiene/defense-in-depth: teardown() stops the players but used to leave the main player's
+  // "play"/"beat" listeners attached. Those closures reference the module-level scorer, so a late
+  // beat from a previous session's closing AudioContext could reach a *new* session's scorer.
+  const deps = makeDeps(true);
+  const { factory, beatboxes } = makePositionedBeatboxFactory();
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
+  engine.configure(makeDefaultConfig());
+
+  await engine.start();
+  beatboxes[0].handlers.stop?.();   // count-in done → onCountInComplete builds the main player
+  await Promise.resolve();
+  expect(beatboxes.length).toBeGreaterThanOrEqual(2);
+  const mainPlayer = beatboxes[1].player;
+
+  await engine.stop();              // teardown() must remove the main player's listeners
+
+  expect(mainPlayer.off).toHaveBeenCalledWith("play", expect.any(Function));
+  expect(mainPlayer.off).toHaveBeenCalledWith("beat", expect.any(Function));
 });
 
 test("engine.off() removes the listener", async () => {
