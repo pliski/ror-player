@@ -37,6 +37,9 @@ export interface TrainerEngineOpts {
   finaliseDelayMs?: number;
   beatboxFactory?: (repeat: boolean) => { ref: BeatboxReference; player: Beatbox };
   latencyOffsetMs?: number;
+  /** Injectable monotonic clock (ms). Defaults to performance.now(). Lets tests drive
+   *  loop-elapsed deterministically — notably the time-based loop-wrap detection. */
+  now?: () => number;
 }
 
 export type TrainerEngineEvents = {
@@ -79,12 +82,14 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     setTimeout: (cb: () => void, ms: number) => window.setTimeout(cb, ms),
     clearTimeout: (id: number) => window.clearTimeout(id),
   };
+  const now = opts.now ?? (() => performance.now());
   const events: Emitter<TrainerEngineEvents> = mitt();
   let activeStream: MediaStream | null = null;
 
   let cfg: TrainerConfig | null = null;
   let scorer: ScorerHandle | null = null;
   let loopBaselinePerf: number | null = null;
+  let loopLengthMs = 0; // current session's loop length (ms); set when the scorer/timeline is built
   let onsetHandler: ((e: { t_perf: number; energy: number }) => void) | null = null;
 
   let countIn: { ref: BeatboxReference; player: Beatbox } | null = null;
@@ -117,6 +122,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       toleranceForDifficulty(cfg.difficulty ?? "normal"),
     );
     scorer = createScorer(timeline);
+    loopLengthMs = timeline.loopLengthMs;
 
     onsetHandler = (e: { t_perf: number; energy: number }) => {
       if (state.value !== "gameOn" || loopBaselinePerf === null || !scorer) return;
@@ -163,22 +169,21 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     mainPlayer.setPattern(mainRaw);
     mainPlayer.setBeatLength(60_000 / cfg.speedBpm / config.playTime);
     mainPlayer.setRepeat(true);
-    // Detect wraps via a position-decreased transition rather than `position === 0`:
-    // Beatbox emits "beat" with the position captured at scheduling time, but
-    // re-querying mainPlayer.getPosition() in the handler races against the
-    // audio clock and may have advanced past 0 by the time we check.
-    let lastBeatPosition = -1;
+    // Loop-wrap detection is time-based, NOT position-based. A brand-new AudioContext can
+    // report a garbage beat position before its output clock settles (live trace saw 7373,
+    // then a snap to 0); the old `position < lastBeatPosition` test misread that snap-back as a
+    // loop boundary ~15ms in and pushed a full empty loop of phantom misses into the scorer. A
+    // real wrap is one loopLengthMs after the baseline — detect it from elapsed time, re-anchoring
+    // the baseline each loop so per-beat jitter can't accumulate.
     mainPlayer.on("play", () => {
-      loopBaselinePerf = performance.now();
-      lastBeatPosition = -1;
+      loopBaselinePerf = now();
     });
-    mainPlayer.on("beat", (position: number) => {
-      if (lastBeatPosition >= 0 && position < lastBeatPosition && loopBaselinePerf !== null) {
-        loopBaselinePerf = performance.now();
+    mainPlayer.on("beat", () => {
+      if (loopBaselinePerf !== null && now() - loopBaselinePerf >= loopLengthMs) {
+        loopBaselinePerf = now();
         scorer?.onLoopWrap();
         events.emit("loopWrap", {});
       }
-      lastBeatPosition = position;
     });
     mainPlayer.play();
 
@@ -233,13 +238,13 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
 
   async function advanceToGameOn(baselineOverride?: number) {
     if (state.value !== "countIn") return;
-    loopBaselinePerf = baselineOverride ?? performance.now();
+    loopBaselinePerf = baselineOverride ?? now();
     state.value = "gameOn";
   }
 
   async function stopGame() {
     if (state.value !== "gameOn" && state.value !== "countIn") return;
-    const stopAtMs = loopBaselinePerf === null ? 0 : performance.now() - loopBaselinePerf;
+    const stopAtMs = loopBaselinePerf === null ? 0 : now() - loopBaselinePerf;
     state.value = "finalising";
 
     // Stop Beatboxes immediately so user doesn't hear audio during the finalising delay
@@ -273,7 +278,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     // means the scored loop hasn't started — 0 ms have elapsed, so no stroke window has
     // closed and nothing can be missed. Passing null here instead would trip the scorer's
     // "absent elapsed → count the whole loop" path and flash a full loop of phantom misses.
-    const currentLoopElapsedMs = loopBaselinePerf === null ? 0 : performance.now() - loopBaselinePerf;
+    const currentLoopElapsedMs = loopBaselinePerf === null ? 0 : now() - loopBaselinePerf;
     return scorer?.stats({ currentLoopElapsedMs })
       ?? { hits: 0, misses: 0, extras: 0, expectedTotal: 0, meanAbsDelta: 0, drift: 0, headlineScore: 100 };
   }

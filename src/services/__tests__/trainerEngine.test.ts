@@ -307,11 +307,45 @@ function makePositionedBeatboxFactory() {
   return { factory, beatboxes };
 }
 
-test("engine emits 'loopWrap' when main-player beat position decreases", async () => {
+test("does not wrap on a warm-up beat with a garbage position before a full loop elapses", async () => {
+  // Regression: a brand-new AudioContext can report a garbage-large beat position before its
+  // output clock settles (live trace observed 7373, then a snap back to 0, ~15ms into the
+  // session). Position-decrease wrap detection misread that snap-back as a loop boundary and
+  // pushed a full empty loop into the scorer → a loop's worth of phantom misses with zero input.
+  // The wrap must be driven by elapsed time, not beat position.
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
-  engine.configure(makeDefaultConfig());
+  let mockNow = 1000;
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  engine.configure(makeDefaultConfig()); // loopLengthMs = 500 (120bpm × 4 strokes/beat × 1 beat)
+
+  const loopWrapSpy = vi.fn();
+  engine.on("loopWrap", loopWrapSpy);
+
+  await engine.start();
+  beatboxes[0].handlers.stop?.();   // count-in done → onCountInComplete builds the main player
+  await Promise.resolve();
+  expect(beatboxes.length).toBeGreaterThanOrEqual(2);
+
+  beatboxes[1].handlers.play?.();   // loop baseline anchored at mockNow = 1000
+  mockNow = 1015;                   // 15ms in — audio clock still warming up
+  beatboxes[1].handlers.beat?.(7373); // garbage warm-up position
+  mockNow = 1019;
+  beatboxes[1].handlers.beat?.(0);  // clock settles, position snaps to 0 (looks like a decrease)
+
+  expect(loopWrapSpy).not.toHaveBeenCalled();
+  expect(engine.stats().misses).toBe(0);
+});
+
+test("engine emits 'loopWrap' once elapsed reaches a loop length", async () => {
+  // Wrap detection is time-based: a beat fired before one loopLengthMs has elapsed is still
+  // inside the first iteration (no wrap); the first beat at/after the loop length is the wrap.
+  // Beat *position* is irrelevant and deliberately not driven here.
+  const deps = makeDeps(true);
+  const { factory, beatboxes } = makePositionedBeatboxFactory();
+  let mockNow = 1000;
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  engine.configure(makeDefaultConfig()); // loopLengthMs = 500
 
   const loopWrapSpy = vi.fn();
   engine.on("loopWrap", loopWrapSpy);
@@ -321,24 +355,20 @@ test("engine emits 'loopWrap' when main-player beat position decreases", async (
   await Promise.resolve();
   expect(beatboxes.length).toBeGreaterThanOrEqual(2);
 
-  beatboxes[1].handlers.play?.();
-  // Initial beats inside the first iteration — no wrap yet
-  beatboxes[1].handlers.beat?.(0);
-  beatboxes[1].handlers.beat?.(15);
-  beatboxes[1].handlers.beat?.(31);
-  expect(loopWrapSpy).not.toHaveBeenCalled();
-  // Position resets at loop boundary (31 → 0) — wrap detected
-  beatboxes[1].handlers.beat?.(0);
-  expect(loopWrapSpy).toHaveBeenCalledTimes(1);
+  beatboxes[1].handlers.play?.();             // loop baseline = 1000
+  mockNow = 1200; beatboxes[1].handlers.beat?.(0);
+  mockNow = 1499; beatboxes[1].handlers.beat?.(0);
+  expect(loopWrapSpy).not.toHaveBeenCalled(); // still < 500ms elapsed
+  mockNow = 1500; beatboxes[1].handlers.beat?.(0);
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1); // exactly one loop length elapsed → wrap
 });
 
-test("engine detects wrap even when position never lands on 0 (race with audio clock)", async () => {
-  // If the audio clock has advanced past 0 by the time our handler runs, we'd
-  // still see the descending transition 31 → 1. Regression guard for Bug 10.
+test("re-anchors the baseline after a wrap so it fires once per loop, not on every beat", async () => {
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
-  engine.configure(makeDefaultConfig());
+  let mockNow = 1000;
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  engine.configure(makeDefaultConfig()); // loopLengthMs = 500
 
   const loopWrapSpy = vi.fn();
   engine.on("loopWrap", loopWrapSpy);
@@ -347,11 +377,15 @@ test("engine detects wrap even when position never lands on 0 (race with audio c
   beatboxes[0].handlers.stop?.();
   await Promise.resolve();
 
-  beatboxes[1].handlers.play?.();
-  beatboxes[1].handlers.beat?.(0);
-  beatboxes[1].handlers.beat?.(31);
-  beatboxes[1].handlers.beat?.(1);  // skipped 0 due to clock race — still a wrap
+  beatboxes[1].handlers.play?.();             // baseline = 1000
+  mockNow = 1500; beatboxes[1].handlers.beat?.(0);
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1); // wrap #1; baseline re-anchored to 1500
+  // Later beats still inside the second iteration must not re-wrap.
+  mockNow = 1700; beatboxes[1].handlers.beat?.(0);
+  mockNow = 1999; beatboxes[1].handlers.beat?.(0);
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
+  mockNow = 2000; beatboxes[1].handlers.beat?.(0);
+  expect(loopWrapSpy).toHaveBeenCalledTimes(2); // next loop boundary → wrap #2
 });
 
 test("engine.off() removes the listener", async () => {
