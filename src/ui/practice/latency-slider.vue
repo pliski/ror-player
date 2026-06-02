@@ -19,17 +19,17 @@
 </script>
 
 <template>
-	<div class="bb-trainer-latency-slider">
-		<label for="bb-trainer-latency-slider" class="form-label">{{ i18n.t("trainer.latency.label") }} <strong>{{ value }} ms</strong></label>
-		<input id="bb-trainer-latency-slider" type="range" class="form-range" min="-300" max="300" step="5" v-model.number="value">
+	<div class="bb-practice-latency-slider">
+		<label for="bb-practice-latency-slider" class="form-label">{{ i18n.t("practice.latency.label") }} <strong>{{ value }} ms</strong></label>
+		<input id="bb-practice-latency-slider" type="range" class="form-range" min="-300" max="300" step="5" v-model.number="value">
 		<button type="button" class="btn btn-secondary btn-sm mt-1" @click="emit('calibrate')">
-			<fa icon="sliders-h" /> {{ i18n.t("trainer.latency.calibrate") }}
+			<fa icon="sliders-h" /> {{ i18n.t("practice.latency.calibrate") }}
 		</button>
 	</div>
 </template>
 
 <style lang="scss">
-	.bb-trainer-latency-slider {
+	.bb-practice-latency-slider {
 		min-width: 180px;
 	}
 </style>

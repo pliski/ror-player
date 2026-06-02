@@ -28,10 +28,10 @@
 
 	// Explicit literal keys (not `"fail-" + reason`) so the i18n key audit can find them.
 	const FAIL_KEYS: Record<FailReason, string> = {
-		"too-few": "trainer.calibration.fail-too-few",
-		"too-noisy": "trainer.calibration.fail-too-noisy",
-		"worklet": "trainer.calibration.fail-worklet",
-		"mic-denied": "trainer.calibration.fail-mic-denied",
+		"too-few": "practice.calibration.fail-too-few",
+		"too-noisy": "practice.calibration.fail-too-noisy",
+		"worklet": "practice.calibration.fail-worklet",
+		"mic-denied": "practice.calibration.fail-mic-denied",
 	};
 	const failKey = computed(() => FAIL_KEYS[failReason.value ?? "too-few"]);
 
@@ -178,27 +178,27 @@
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h5 class="modal-title">{{ i18n.t("trainer.calibration.title") }}</h5>
+					<h5 class="modal-title">{{ i18n.t("practice.calibration.title") }}</h5>
 					<button type="button" class="btn-close" @click="close"></button>
 				</div>
 				<div class="modal-body">
-					<p v-if="phase === 'idle'">{{ i18n.t("trainer.calibration.idle-instructions") }}</p>
-					<p v-else-if="phase === 'listening'">{{ i18n.t("trainer.calibration.listening") }}</p>
+					<p v-if="phase === 'idle'">{{ i18n.t("practice.calibration.idle-instructions") }}</p>
+					<p v-else-if="phase === 'listening'">{{ i18n.t("practice.calibration.listening") }}</p>
 					<p v-else-if="phase === 'done'">
-						{{ i18n.t("trainer.calibration.result-median", { median: Math.round(result?.medianMs ?? 0) }) }}<br>
-						{{ i18n.t("trainer.calibration.result-spread", { spread: Math.round(result?.spread ?? 0) }) }}<br>
-						<small v-if="(result?.spread ?? 0) > 30" class="text-warning">{{ i18n.t("trainer.calibration.spread-warning") }}</small>
+						{{ i18n.t("practice.calibration.result-median", { median: Math.round(result?.medianMs ?? 0) }) }}<br>
+						{{ i18n.t("practice.calibration.result-spread", { spread: Math.round(result?.spread ?? 0) }) }}<br>
+						<small v-if="(result?.spread ?? 0) > 30" class="text-warning">{{ i18n.t("practice.calibration.spread-warning") }}</small>
 					</p>
 					<p v-else-if="phase === 'failed'" class="text-warning">
 						{{ i18n.t(failKey) }}
 					</p>
 				</div>
 				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" @click="close">{{ i18n.t("trainer.calibration.cancel") }}</button>
-					<button v-if="phase === 'idle'" type="button" class="btn btn-primary" @click="start">{{ i18n.t("trainer.calibration.start") }}</button>
-					<button v-if="phase === 'failed'" type="button" class="btn btn-primary" @click="start">{{ i18n.t("trainer.calibration.retry") }}</button>
+					<button type="button" class="btn btn-secondary" @click="close">{{ i18n.t("practice.calibration.cancel") }}</button>
+					<button v-if="phase === 'idle'" type="button" class="btn btn-primary" @click="start">{{ i18n.t("practice.calibration.start") }}</button>
+					<button v-if="phase === 'failed'" type="button" class="btn btn-primary" @click="start">{{ i18n.t("practice.calibration.retry") }}</button>
 					<button v-if="phase === 'done'" type="button" class="btn btn-primary" @click="applyResult">
-						{{ i18n.t("trainer.calibration.apply", { median: Math.round(result?.medianMs ?? 0) }) }}
+						{{ i18n.t("practice.calibration.apply", { median: Math.round(result?.medianMs ?? 0) }) }}
 					</button>
 				</div>
 			</div>

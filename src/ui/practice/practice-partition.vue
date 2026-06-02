@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { ref, watch } from "vue";
 	import PatternPlayer from "../pattern-player/pattern-player.vue";
-	import { type Verdict } from "../../services/trainerScorer";
+	import { type Verdict } from "../../services/practiceScorer";
 	import { Instrument } from "../../config";
 
 	const props = defineProps<{
@@ -32,13 +32,13 @@
 </script>
 
 <template>
-	<div class="bb-trainer-partition" ref="containerRef">
+	<div class="bb-practice-partition" ref="containerRef">
 		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" hidePlaybackControls multiLineWhenNarrow />
 	</div>
 </template>
 
 <style lang="scss">
-	.bb-trainer-partition {
+	.bb-practice-partition {
 		padding-left: 12px;
 
 		.bb-pattern-editor-toolbar {

@@ -17,16 +17,16 @@
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
-					<h5 class="modal-title">{{ i18n.t("trainer.permission.title") }}</h5>
+					<h5 class="modal-title">{{ i18n.t("practice.permission.title") }}</h5>
 					<button type="button" class="btn-close" @click="$emit('update:open', false)"></button>
 				</div>
 				<div class="modal-body">
-					<p>{{ i18n.t("trainer.permission.body") }}</p>
-					<p class="small text-muted">{{ i18n.t("trainer.permission.privacy") }}</p>
+					<p>{{ i18n.t("practice.permission.body") }}</p>
+					<p class="small text-muted">{{ i18n.t("practice.permission.privacy") }}</p>
 				</div>
 				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" @click="$emit('update:open', false)">{{ i18n.t("trainer.permission.cancel") }}</button>
-					<button type="button" class="btn btn-primary" @click="$emit('confirm')"><fa icon="microphone" /> {{ i18n.t("trainer.permission.enable") }}</button>
+					<button type="button" class="btn btn-secondary" @click="$emit('update:open', false)">{{ i18n.t("practice.permission.cancel") }}</button>
+					<button type="button" class="btn btn-primary" @click="$emit('confirm')"><fa icon="microphone" /> {{ i18n.t("practice.permission.enable") }}</button>
 				</div>
 			</div>
 		</div>

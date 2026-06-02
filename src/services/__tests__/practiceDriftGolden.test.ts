@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
-import { createTrainerEngine, TrainerConfig, TrainerEngineOpts } from "../trainerEngine";
-import { buildExpectedTimeline, ExpectedHit, SessionStats } from "../trainerScorer";
+import { createPracticeEngine, PracticeConfig, PracticeEngineOpts } from "../practiceEngine";
+import { buildExpectedTimeline, ExpectedHit, SessionStats } from "../practiceScorer";
 import { normalizePattern } from "../../state/pattern";
 import type Beatbox from "beatbox.js";
 import type { BeatboxReference } from "../player";
@@ -55,7 +55,7 @@ function makeDeps() {
   };
 }
 
-function makeConfig(snLine: string[]): TrainerConfig {
+function makeConfig(snLine: string[]): PracticeConfig {
   return {
     pattern: normalizePattern({ length: 1, time: 4, sn: snLine }),
     instrument: "sn",
@@ -70,15 +70,15 @@ function makeConfig(snLine: string[]): TrainerConfig {
  * matches against the full expected timeline with no tail-trimming).
  */
 async function runSession(
-  config: TrainerConfig,
+  config: PracticeConfig,
   feedTimes: number[],
-  opts: TrainerEngineOpts = {},
+  opts: PracticeEngineOpts = {},
 ): Promise<SessionStats> {
   let onsetSub: ((e: { t_perf: number; energy: number }) => void) | null = null;
   const deps = makeDeps();
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
 
-  const engine = createTrainerEngine(deps, { beatboxFactory: () => makeFakeBeatbox(), ...opts });
+  const engine = createPracticeEngine(deps, { beatboxFactory: () => makeFakeBeatbox(), ...opts });
   engine.configure(config);
   await engine.start();              // → countIn (count-in beatbox never fires "stop" here)
   await engine.advanceToGameOn(BASELINE); // → gameOn with an explicit loop baseline

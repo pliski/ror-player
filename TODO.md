@@ -38,6 +38,6 @@
 
 ## new
 
-- training -->  practice
-- breaks??
-
+- [X] training -->  practice
+- [ ] breaks??
+- [ ] untangling ror-player-docs git (cloned form the upstream repo)

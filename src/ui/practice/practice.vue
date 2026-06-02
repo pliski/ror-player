@@ -7,23 +7,23 @@
 	import { getTuneOfTheYear } from "../../services/utils";
 	import { stopAllPlayers } from "../../services/player";
 	import config, { Instrument } from "../../config";
-	import type { TrainerMode } from "../../services/trainerEngine";
-	import { createTrainerEngine } from "../../services/trainerEngine";
+	import type { PracticeMode } from "../../services/practiceEngine";
+	import { createPracticeEngine } from "../../services/practiceEngine";
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
-	import type { Verdict, Difficulty } from "../../services/trainerScorer";
-	import { SILENT_STROKES } from "../../services/trainerScorer";
-	import { normalizeTrainerSettings } from "../../state/trainerSettings";
+	import type { Verdict, Difficulty } from "../../services/practiceScorer";
+	import { SILENT_STROKES } from "../../services/practiceScorer";
+	import { normalizePracticeSettings } from "../../state/practiceSettings";
 	import { reactiveLocalStorage } from "../../services/localStorage";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
 	import CalibrationWizard from "./calibration-wizard.vue";
 	import HeadphonesWarning from "./headphones-warning.vue";
 	import PermissionDialog from "./permission-dialog.vue";
-	import TrainerPartition from "./trainer-partition.vue";
-	import TrainerScoreRail from "./trainer-score-rail.vue";
-	import TrainerToolbar from "./trainer-toolbar.vue";
-	import { listParts, resolvePartName } from "./trainerParts";
+	import PracticePartition from "./practice-partition.vue";
+	import PracticeScoreRail from "./practice-score-rail.vue";
+	import PracticeToolbar from "./practice-toolbar.vue";
+	import { listParts, resolvePartName } from "./practiceParts";
 
 	const props = defineProps<{
 		tuneName?: string;
@@ -71,7 +71,7 @@
 	}, { immediate: true });
 
 	const instrument = ref<Instrument>("sn");
-	const mode = ref<TrainerMode>("instrument");
+	const mode = ref<PracticeMode>("instrument");
 	const latencyMs = ref(0);
 	const difficulty = ref<Difficulty>("easy");
 	const speedBpm = ref(config.defaultSpeed);
@@ -81,10 +81,10 @@
 
 	const settings = computed({
 		get: () => {
-			const raw = reactiveLocalStorage.bbTrainerSettings;
-			return normalizeTrainerSettings(raw ? JSON.parse(raw) : undefined);
+			const raw = reactiveLocalStorage.bbPracticeSettings;
+			return normalizePracticeSettings(raw ? JSON.parse(raw) : undefined);
 		},
-		set: (s) => { reactiveLocalStorage.bbTrainerSettings = JSON.stringify(s); },
+		set: (s) => { reactiveLocalStorage.bbPracticeSettings = JSON.stringify(s); },
 	});
 
 	const currentPattern = computed(() => tuneName.value && patternName.value
@@ -98,9 +98,9 @@
 
 	const micPermission = createMicPermission();
 	const detector = createOnsetDetector();
-	const engine = createTrainerEngine({ micPermission, detector });
+	const engine = createPracticeEngine({ micPermission, detector });
 
-	const trainerState = computed(() => engine.state.value);
+	const practiceState = computed(() => engine.state.value);
 
 	// Keep-if-overridden sync: on pattern/tune change, follow the new pattern's default ONLY IF
 	// the user hasn't overridden speed (i.e. it still equals the previous pattern's default).
@@ -154,7 +154,7 @@
 			return;
 		}
 		// eslint-disable-next-line no-console
-		await engine.start().catch((err) => { console.error("Trainer engine failed to start:", err); });
+		await engine.start().catch((err) => { console.error("Practice engine failed to start:", err); });
 	}
 
 	function confirmHeadphones() {
@@ -167,7 +167,7 @@
 		settings.value = { ...settings.value, micPromptAcked: true };
 		permissionOpen.value = false;
 		// eslint-disable-next-line no-console
-		void engine.start().catch((err) => { console.error("Trainer engine failed to start:", err); });
+		void engine.start().catch((err) => { console.error("Practice engine failed to start:", err); });
 	}
 
 	async function handleStop() {
@@ -180,7 +180,7 @@
 	const stats = ref(engine.stats());
 	// Throttled update via interval (~10 Hz) — could use a watcher on state but stats is non-reactive
 	let statsTimer: number | null = null;
-	watch(trainerState, (s) => {
+	watch(practiceState, (s) => {
 		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
 		// Entering a new session: clear the prior run's final totals immediately. The engine
 		// has already torn down its scorer by requestingMic, so engine.stats() reads zeros.
@@ -232,7 +232,7 @@
 		carryStroke = null;
 	});
 
-	watch(trainerState, (s, prev) => {
+	watch(practiceState, (s, prev) => {
 		if (s === "countIn" && prev !== "countIn") {
 			verdicts.value = new Map();
 			recentHits.value = [];
@@ -254,7 +254,7 @@
 </script>
 
 <template>
-	<div class="bb-trainer">
+	<div class="bb-practice">
 		<HybridSidebar v-model:isExpanded="isSidebarExpanded" :toggleContainer="sidebarToggleContainer" expandBreakpoint="md">
 			<TuneList v-model:tuneName="tuneNameForList" />
 			<template v-slot:toggle>
@@ -264,20 +264,20 @@
 			</template>
 		</HybridSidebar>
 
-		<div class="bb-trainer-main">
-			<TrainerScoreRail
+		<div class="bb-practice-main">
+			<PracticeScoreRail
 					:stats="stats"
 					:recentHits="recentHits"
-					:micActive="trainerState !== 'idle' && trainerState !== 'results'"
+					:micActive="practiceState !== 'idle' && practiceState !== 'results'"
 					:latencyMs="latencyMs"
-					:state="trainerState"
+					:state="practiceState"
 					:difficulty="difficulty"
 					:speedBpm="speedBpm"
-					:disabledReason="!hasHits ? i18n.t('trainer.no-hits') : undefined"
+					:disabledReason="!hasHits ? i18n.t('practice.no-hits') : undefined"
 					v-if="tuneName && patternName"
 				/>
-			<div v-if="tuneName && patternName" class="bb-trainer-pane">
-				<TrainerToolbar
+			<div v-if="tuneName && patternName" class="bb-practice-pane">
+				<PracticeToolbar
 					:pattern="currentPattern"
 					:parts="parts"
 					v-model:patternName="patternName"
@@ -286,15 +286,15 @@
 					v-model:latencyMs="latencyMs"
 					v-model:difficulty="difficulty"
 					v-model:speedBpm="speedBpm"
-					:state="trainerState"
+					:state="practiceState"
 					:disabled="!hasHits"
 					@start="handleStart"
 					@stop="handleStop"
 					@calibrate="handleCalibrate"
 				/>
-				<TrainerPartition v-if="currentPattern" :tuneName="tuneName" :patternName="patternName" :instrument="instrument" :verdicts="verdicts" />
+				<PracticePartition v-if="currentPattern" :tuneName="tuneName" :patternName="patternName" :instrument="instrument" :verdicts="verdicts" />
 			</div>
-			<div v-else class="p-3 text-muted">{{ i18n.t("trainer.pick-tune") }}</div>
+			<div v-else class="p-3 text-muted">{{ i18n.t("practice.pick-tune") }}</div>
 		</div>
 
 		<CalibrationWizard
@@ -305,18 +305,18 @@
 		/>
 		<PermissionDialog v-model:open="permissionOpen" @confirm="confirmPermission" />
 		<HeadphonesWarning v-model:open="headphonesOpen" @confirm="confirmHeadphones" />
-		<div class="bb-trainer-rotate-overlay">
-			<div class="bb-trainer-rotate-inner">
-				<div class="bb-trainer-rotate-glyph">⟳</div>
-				<h4>{{ i18n.t("trainer.rotate.title") }}</h4>
-				<p>{{ i18n.t("trainer.rotate.hint") }}</p>
+		<div class="bb-practice-rotate-overlay">
+			<div class="bb-practice-rotate-inner">
+				<div class="bb-practice-rotate-glyph">⟳</div>
+				<h4>{{ i18n.t("practice.rotate.title") }}</h4>
+				<p>{{ i18n.t("practice.rotate.hint") }}</p>
 			</div>
 		</div>
 	</div>
 </template>
 
 <style lang="scss">
-	.bb-trainer {
+	.bb-practice {
 		display: flex;
 		flex-grow: 1;
 		min-height: 0;
@@ -326,13 +326,13 @@
 			flex-grow: 1;
 		}
 
-		.bb-trainer-main {
+		.bb-practice-main {
 			flex-grow: 1;
 			display: flex;
 			flex-direction: row;
 			min-height: 0;
 
-			.bb-trainer-pane {
+			.bb-practice-pane {
 				flex-grow: 1;
 				display: flex;
 				flex-direction: column;
@@ -341,9 +341,9 @@
 			}
 		}
 
-		.bb-trainer-rotate-overlay { display: none; }
+		.bb-practice-rotate-overlay { display: none; }
 		@media (orientation: portrait) and (max-width: 767.98px) {
-			.bb-trainer-rotate-overlay {
+			.bb-practice-rotate-overlay {
 				display: flex;
 				position: absolute;
 				inset: 0;
@@ -354,7 +354,7 @@
 				padding: 24px;
 				background: var(--bs-body-bg);
 
-				.bb-trainer-rotate-glyph { font-size: 44px; line-height: 1; margin-bottom: 12px; }
+				.bb-practice-rotate-glyph { font-size: 44px; line-height: 1; margin-bottom: 12px; }
 				p { color: var(--bs-secondary-color); font-size: 14px; max-width: 320px; }
 			}
 		}

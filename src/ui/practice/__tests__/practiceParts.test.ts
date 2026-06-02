@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { listParts, defaultPartName, resolvePartName } from "../trainerParts";
+import { listParts, defaultPartName, resolvePartName } from "../practiceParts";
 
 test("defaultPartName prefers 'Tune' when present", () => {
 	expect(defaultPartName(["Break 1", "Tune", "Break 2"])).toBe("Tune");

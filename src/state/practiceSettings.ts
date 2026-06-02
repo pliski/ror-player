@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { instrumentValidator } from "../config";
 
-export const trainerSettingsValidator = z.object({
+export const practiceSettingsValidator = z.object({
   latencyOffsetMs: z.number().default(0),
   latencyCalibratedAt: z.number().optional(),
   sensitivity: z.preprocess(
@@ -17,9 +17,9 @@ export const trainerSettingsValidator = z.object({
   lastPatternName: z.string().optional(),
 }).default(() => ({}));
 
-export type TrainerSettings = z.infer<typeof trainerSettingsValidator>;
-export type TrainerSettingsOptional = z.input<typeof trainerSettingsValidator>;
+export type PracticeSettings = z.infer<typeof practiceSettingsValidator>;
+export type PracticeSettingsOptional = z.input<typeof practiceSettingsValidator>;
 
-export function normalizeTrainerSettings(data?: TrainerSettingsOptional): TrainerSettings {
-  return trainerSettingsValidator.parse(data);
+export function normalizePracticeSettings(data?: PracticeSettingsOptional): PracticeSettings {
+  return practiceSettingsValidator.parse(data);
 }

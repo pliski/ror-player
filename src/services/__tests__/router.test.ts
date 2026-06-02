@@ -2,27 +2,27 @@ import { expect, test } from "vitest";
 import { ref } from "vue";
 import { useRouter } from "../router";
 
-test("trainer route is recognized", () => {
-	const path = ref("/trainer/Funk/Tune");
+test("practice route is recognized", () => {
+	const path = ref("/practice/Funk/Tune");
 	const route = useRouter(path);
-	expect(route.value.tab).toBe("trainer");
-	if (route.value.tab === "trainer") {
+	expect(route.value.tab).toBe("practice");
+	if (route.value.tab === "practice") {
 		expect(route.value.tuneName).toBe("Funk");
 		expect(route.value.patternName).toBe("Tune");
 	}
 });
 
-test("trainer root", () => {
-	const path = ref("/trainer/");
+test("practice root", () => {
+	const path = ref("/practice/");
 	const route = useRouter(path);
-	expect(route.value.tab).toBe("trainer");
+	expect(route.value.tab).toBe("practice");
 });
 
-test("trainer tune-only (no pattern)", () => {
-	const path = ref("/trainer/Funk/");
+test("practice tune-only (no pattern)", () => {
+	const path = ref("/practice/Funk/");
 	const route = useRouter(path);
-	expect(route.value.tab).toBe("trainer");
-	if (route.value.tab === "trainer") {
+	expect(route.value.tab).toBe("practice");
+	if (route.value.tab === "practice") {
 		expect(route.value.tuneName).toBe("Funk");
 		expect(route.value.patternName).toBeUndefined();
 	}

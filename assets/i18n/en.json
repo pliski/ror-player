@@ -222,9 +222,9 @@
 	"overview": {
 		"listen": "Listen",
 		"compose": "Compose",
-		"trainer": "Practice"
+		"practice": "Practice"
 	},
-	"trainer": {
+	"practice": {
 		"pick-tune": "Pick a tune from the sidebar to start practicing.",
 		"no-hits": "No strokes to practice for this instrument.",
 		"results": {

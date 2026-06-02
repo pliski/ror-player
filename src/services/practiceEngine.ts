@@ -2,14 +2,14 @@ import { Ref, ref } from "vue";
 import mitt, { Emitter } from "mitt";
 import { MicPermission } from "./mediaPermissions";
 import { OnsetDetector } from "./onsetDetector";
-import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict, toleranceForDifficulty, Difficulty } from "./trainerScorer";
+import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict, toleranceForDifficulty, Difficulty } from "./practiceScorer";
 import config, { Instrument } from "../config";
 import { Pattern, normalizePattern } from "../state/pattern";
 import type Beatbox from "beatbox.js";
 import { patternToBeatbox, createBeatbox, getPlayerById, BeatboxReference } from "./player";
 import { normalizePlaybackSettings } from "../state/playbackSettings";
 
-export type TrainerState =
+export type PracticeState =
   | "idle"
   | "requestingMic"
   | "countIn"
@@ -17,22 +17,22 @@ export type TrainerState =
   | "finalising"
   | "results";
 
-export type TrainerMode = "instrument" | "band";
+export type PracticeMode = "instrument" | "band";
 
-export interface TrainerConfig {
+export interface PracticeConfig {
   pattern: Pattern;
   instrument: Instrument;
   speedBpm: number;
-  mode: TrainerMode;
+  mode: PracticeMode;
   difficulty?: Difficulty;
 }
 
-export interface TrainerEngineDeps {
+export interface PracticeEngineDeps {
   micPermission: MicPermission;
   detector: OnsetDetector;
 }
 
-export interface TrainerEngineOpts {
+export interface PracticeEngineOpts {
   timer?: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout };
   finaliseDelayMs?: number;
   beatboxFactory?: (repeat: boolean) => { ref: BeatboxReference; player: Beatbox };
@@ -42,22 +42,22 @@ export interface TrainerEngineOpts {
   now?: () => number;
 }
 
-export type TrainerEngineEvents = {
+export type PracticeEngineEvents = {
   verdict: { strokeIdx: number; verdict: Verdict; delta: number; nextLoop: boolean };
   loopWrap: object;
 } & Record<string, unknown>;
 
-export interface TrainerEngine {
-  state: Ref<TrainerState>;
+export interface PracticeEngine {
+  state: Ref<PracticeState>;
   start(): Promise<void>;
   stop(): Promise<void>;
   stopGame(): Promise<void>;
   advanceToGameOn(baselineOverride?: number): Promise<void>;
-  configure(c: TrainerConfig): void;
+  configure(c: PracticeConfig): void;
   stats(): SessionStats;
   debugLoopBaseline(): number | null;
-  on<K extends keyof TrainerEngineEvents>(ev: K, h: (e: TrainerEngineEvents[K]) => void): void;
-  off<K extends keyof TrainerEngineEvents>(ev: K, h: (e: TrainerEngineEvents[K]) => void): void;
+  on<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;
+  off<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;
 }
 
 function buildCountInPattern(speedBpm: number) {
@@ -72,8 +72,8 @@ function buildCountInPattern(speedBpm: number) {
   });
 }
 
-export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngineOpts = {}): TrainerEngine {
-  const state = ref<TrainerState>("idle");
+export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEngineOpts = {}): PracticeEngine {
+  const state = ref<PracticeState>("idle");
   const finaliseDelayMs = opts.finaliseDelayMs ?? 500;
   // Thunked to keep the window-method `this` binding — Firefox throws
   // "called on an object that does not implement interface Window" if these
@@ -83,10 +83,10 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     clearTimeout: (id: number) => window.clearTimeout(id),
   };
   const now = opts.now ?? (() => performance.now());
-  const events: Emitter<TrainerEngineEvents> = mitt();
+  const events: Emitter<PracticeEngineEvents> = mitt();
   let activeStream: MediaStream | null = null;
 
-  let cfg: TrainerConfig | null = null;
+  let cfg: PracticeConfig | null = null;
   let scorer: ScorerHandle | null = null;
   let loopBaselinePerf: number | null = null;
   let loopLengthMs = 0; // current session's loop length (ms); set when the scorer/timeline is built
@@ -102,7 +102,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     return { ref, player: getPlayerById(ref.id) };
   }
 
-  function configure(c: TrainerConfig) {
+  function configure(c: PracticeConfig) {
     const oldCfg = cfg;
     cfg = c;
     if (oldCfg && state.value !== "idle") {
@@ -117,7 +117,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
   }
 
   function setupScorerAndDetector() {
-    if (!cfg) throw new Error("Trainer not configured");
+    if (!cfg) throw new Error("Practice not configured");
     const timeline = buildExpectedTimeline(
       cfg.pattern, cfg.instrument, cfg.speedBpm,
       toleranceForDifficulty(cfg.difficulty ?? "normal"),
@@ -135,7 +135,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
       const verdict = scorer.acceptHit({ t: tLoop, energy: e.energy });
       if (verdict && "strokeIdx" in verdict) {
         // An early hit matched across the loop boundary belongs to the loop about to start, so
-        // the UI must keep its highlight through the imminent loop-wrap clear (see trainer.vue).
+        // the UI must keep its highlight through the imminent loop-wrap clear (see practice.vue).
         const nextLoop = verdict.wrapped && verdict.delta < 0;
         events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict, delta: verdict.delta, nextLoop });
       }
@@ -217,14 +217,14 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     try {
       activeStream = await deps.micPermission.request();
       // stop() may have been called while we were awaiting the permission prompt
-      if ((state.value as TrainerState) === "idle") {
+      if ((state.value as PracticeState) === "idle") {
         deps.micPermission.release(activeStream);
         activeStream = null;
         return;
       }
       await deps.detector.start(activeStream, {});
       // stop() may have been called while we were awaiting the detector
-      if ((state.value as TrainerState) === "idle") return;
+      if ((state.value as PracticeState) === "idle") return;
       setupScorerAndDetector();
 
       // Build the count-in pattern + Beatbox
@@ -272,7 +272,7 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
 
     await new Promise<void>((resolve) => timer.setTimeout(resolve, finaliseDelayMs));
     // stop() may have fired during the finalising delay
-    if ((state.value as TrainerState) === "idle") return;
+    if ((state.value as PracticeState) === "idle") return;
     scorer?.finalize({ stopAtMs, tailMs: 500 });
     state.value = "results";
     if (activeStream) {

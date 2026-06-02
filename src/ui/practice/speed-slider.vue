@@ -19,17 +19,17 @@
 </script>
 
 <template>
-	<div class="bb-trainer-speed-slider">
-		<label for="bb-trainer-speed-slider" class="form-label">{{ i18n.t("trainer.speed.label") }} <strong>{{ value }} BPM</strong></label>
-		<input id="bb-trainer-speed-slider" type="range" class="form-range" min="30" max="180" v-model.number="value">
+	<div class="bb-practice-speed-slider">
+		<label for="bb-practice-speed-slider" class="form-label">{{ i18n.t("practice.speed.label") }} <strong>{{ value }} BPM</strong></label>
+		<input id="bb-practice-speed-slider" type="range" class="form-range" min="30" max="180" v-model.number="value">
 		<button type="button" class="btn btn-secondary btn-sm mt-1" @click="emit('update:modelValue', props.defaultSpeed)">
-			{{ i18n.t("trainer.speed.reset") }}
+			{{ i18n.t("practice.speed.reset") }}
 		</button>
 	</div>
 </template>
 
 <style lang="scss">
-	.bb-trainer-speed-slider {
+	.bb-practice-speed-slider {
 		min-width: 180px;
 	}
 </style>

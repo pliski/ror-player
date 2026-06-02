@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createTrainerEngine, TrainerEngineOpts } from "../trainerEngine";
+import { createPracticeEngine, PracticeEngineOpts } from "../practiceEngine";
 import { normalizePattern } from "../../state/pattern";
 import type Beatbox from "beatbox.js";
 import type { BeatboxReference } from "../player";
@@ -28,14 +28,14 @@ function makeFakeBeatbox(): { ref: BeatboxReference; player: Beatbox } {
   return { ref, player };
 }
 
-function makeDefaultOpts(): TrainerEngineOpts {
+function makeDefaultOpts(): PracticeEngineOpts {
   return {
     beatboxFactory: () => makeFakeBeatbox(),
   };
 }
 
 test("engine starts in Idle", () => {
-  const engine = createTrainerEngine({
+  const engine = createPracticeEngine({
     micPermission: { state: { value: "unknown" } as any, request: async () => ({} as any), release: () => {} },
     detector: { start: async () => {}, stop: async () => {}, setSensitivity: () => {}, on: () => {}, off: () => {} },
   });
@@ -71,7 +71,7 @@ function makeDefaultConfig() {
 
 test("start() transitions to requestingMic then countIn on grant", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   const promise = engine.start();
   expect(engine.state.value).toBe("requestingMic");
@@ -87,7 +87,7 @@ test("stats during countIn reports zero misses (no loop baseline yet)", async ()
   // scorer treats as "count the whole loop". With no hits and no time elapsed,
   // nothing can yet be missed.
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig()); // pattern has 2 strokes (X . X .)
   await engine.start();
   expect(engine.state.value).toBe("countIn");
@@ -97,7 +97,7 @@ test("stats during countIn reports zero misses (no loop baseline yet)", async ()
 
 test("start() denied returns to idle", async () => {
   const deps = makeDeps(false);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start().catch(() => {});
   expect(engine.state.value).toBe("idle");
@@ -105,7 +105,7 @@ test("start() denied returns to idle", async () => {
 
 test("stop() resets to idle and cleans up", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.stop();
@@ -116,7 +116,7 @@ test("stop() resets to idle and cleans up", async () => {
 
 test("start() is a no-op when not idle or results", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start(); // → countIn
   expect(engine.state.value).toBe("countIn");
@@ -131,7 +131,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
     setTimeout: (cb: () => void, _ms: number) => { queueMicrotask(cb); return 0 as any; },
     clearTimeout: () => {},
   };
-  const engine = createTrainerEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
+  const engine = createPracticeEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
   engine.configure(makeDefaultConfig());
   await engine.start();
   expect(engine.state.value).toBe("countIn");
@@ -141,7 +141,7 @@ test("countIn completes and transitions to gameOn after configured ms", async ()
 
 test("stopGame() transitions from gameOn through finalising to results", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
@@ -159,7 +159,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
     },
     clearTimeout: () => {},
   };
-  const engine = createTrainerEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
+  const engine = createPracticeEngine(deps, { timer: fakeTimer as any, beatboxFactory: () => makeFakeBeatbox() });
   engine.configure(makeDefaultConfig());
   await engine.start();
   await engine.advanceToGameOn();
@@ -172,7 +172,7 @@ test("stop() during finalising cancels stopGame's transition to results", async 
 
 test("advanceToGameOn() is a no-op from non-countIn states", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure(makeDefaultConfig());
   // From idle — should not transition
   await engine.advanceToGameOn();
@@ -193,7 +193,7 @@ test("engine pipes detected hits into the scorer after gameOn", async () => {
 
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
 
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
 
@@ -217,7 +217,7 @@ test("engine emits 'verdict' when the scorer matches a hit", async () => {
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
 
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
 
@@ -244,7 +244,7 @@ test("difficulty scales the scoring tolerance threaded into the timeline", async
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
 
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument", difficulty: "hard" });
   await engine.start();
 
@@ -264,7 +264,7 @@ test("difficulty scales the scoring tolerance threaded into the timeline", async
 
 test("changing difficulty during gameOn resets to idle", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   const cfg = {
     pattern: normalizePattern({ length: 1, time: 4, sn: ["X"] }),
     instrument: "sn" as const, speedBpm: 120, mode: "instrument" as const, difficulty: "easy" as const,
@@ -316,7 +316,7 @@ test("does not wrap on a warm-up beat with a garbage position before a full loop
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  const engine = createPracticeEngine(deps, { beatboxFactory: factory, now: () => mockNow });
   engine.configure(makeDefaultConfig()); // loopLengthMs = 500 (120bpm × 4 strokes/beat × 1 beat)
 
   const loopWrapSpy = vi.fn();
@@ -348,7 +348,7 @@ test("loop baseline tracks the audio wrap and does not drift over many loops", a
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   const B = 10_000;
   let mockNow = B;
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  const engine = createPracticeEngine(deps, { beatboxFactory: factory, now: () => mockNow });
   engine.configure(makeDefaultConfig()); // loopLengthMs = 500
   const L = 500;
   const beatMs = 30; // beat cadence — deliberately does NOT divide L, so a late wrap overshoots
@@ -384,7 +384,7 @@ test("engine emits 'loopWrap' on the audio loop wrap (position decrease)", async
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  const engine = createPracticeEngine(deps, { beatboxFactory: factory, now: () => mockNow });
   engine.configure(makeDefaultConfig()); // loopLengthMs = 500
 
   const loopWrapSpy = vi.fn();
@@ -407,7 +407,7 @@ test("re-anchors to the wrap and fires once per loop, not on every beat", async 
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  const engine = createPracticeEngine(deps, { beatboxFactory: factory, now: () => mockNow });
   engine.configure(makeDefaultConfig()); // loopLengthMs = 500
 
   const loopWrapSpy = vi.fn();
@@ -436,7 +436,7 @@ test("stop() detaches the main player's listeners so a stale beat can't reach a 
   // beat from a previous session's closing AudioContext could reach a *new* session's scorer.
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
-  const engine = createTrainerEngine(deps, { beatboxFactory: factory });
+  const engine = createPracticeEngine(deps, { beatboxFactory: factory });
   engine.configure(makeDefaultConfig());
 
   await engine.start();
@@ -457,7 +457,7 @@ test("engine.off() removes the listener", async () => {
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
 
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
 
@@ -479,7 +479,7 @@ test("verdict event flags an early downbeat (wrapped to loop end) as nextLoop", 
 
   // strokeMs 125, loopLen 500; strokes at t=0 (idx 0) and t=250 (idx 2).
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
 
@@ -500,7 +500,7 @@ test("verdict event flags an early downbeat (wrapped to loop end) as nextLoop", 
 
 test("configure() during gameOn forces a reset to idle", async () => {
   const deps = makeDeps(true);
-  const engine = createTrainerEngine(deps, makeDefaultOpts());
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({
     pattern: normalizePattern({ length: 1, time: 4, sn: ["X"] }),
     instrument: "sn", speedBpm: 120, mode: "instrument",
