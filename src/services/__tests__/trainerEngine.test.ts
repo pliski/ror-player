@@ -310,9 +310,9 @@ function makePositionedBeatboxFactory() {
 test("does not wrap on a warm-up beat with a garbage position before a full loop elapses", async () => {
   // Regression: a brand-new AudioContext can report a garbage-large beat position before its
   // output clock settles (live trace observed 7373, then a snap back to 0, ~15ms into the
-  // session). Position-decrease wrap detection misread that snap-back as a loop boundary and
-  // pushed a full empty loop into the scorer → a loop's worth of phantom misses with zero input.
-  // The wrap must be driven by elapsed time, not beat position.
+  // session). That snap-back looks like a loop-boundary position decrease, but only ~15ms has
+  // elapsed — far less than a loop — so the wrap's elapsed-time guard must reject it. Otherwise it
+  // pushes a full empty loop into the scorer → a loop's worth of phantom misses with zero input.
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
@@ -337,10 +337,50 @@ test("does not wrap on a warm-up beat with a garbage position before a full loop
   expect(engine.stats().misses).toBe(0);
 });
 
-test("engine emits 'loopWrap' once elapsed reaches a loop length", async () => {
-  // Wrap detection is time-based: a beat fired before one loopLengthMs has elapsed is still
-  // inside the first iteration (no wrap); the first beat at/after the loop length is the wrap.
-  // Beat *position* is irrelevant and deliberately not driven here.
+test("loop baseline tracks the audio wrap and does not drift over many loops", async () => {
+  // Regression for the drift introduced by time-based wrap detection (fix #4): re-anchoring the
+  // baseline to elapsed time (now()) at each wrap accumulated the per-loop overshoot, dragging the
+  // baseline progressively later so every hit read earlier and earlier (all eventually scored
+  // "off"/early; latency offset — a constant shift — couldn't compensate a growing error). The
+  // baseline must follow the real audio loop wrap (position decrease), staying within ~one beat of
+  // each true boundary rather than drifting hundreds of ms over a session.
+  const deps = makeDeps(true);
+  const { factory, beatboxes } = makePositionedBeatboxFactory();
+  const B = 10_000;
+  let mockNow = B;
+  const engine = createTrainerEngine(deps, { beatboxFactory: factory, now: () => mockNow });
+  engine.configure(makeDefaultConfig()); // loopLengthMs = 500
+  const L = 500;
+  const beatMs = 30; // beat cadence — deliberately does NOT divide L, so a late wrap overshoots
+
+  await engine.start();
+  beatboxes[0].handlers.stop?.();
+  await Promise.resolve();
+  const main = beatboxes[1].handlers;
+
+  mockNow = B;
+  main.play?.(); // baseline anchored at the true start B
+
+  const LOOPS = 8;
+  // Feed beats at a fixed cadence; position is derived from the true audio loop phase, so it
+  // decreases (wraps high→0) exactly at each true boundary B + k*L.
+  for (let t = B + beatMs; t <= B + LOOPS * L + L; t += beatMs) {
+    const phase = (t - B) % L;                       // 0..L-1
+    const position = Math.floor((phase / L) * 1000); // 0..999, decreases at each boundary
+    mockNow = t;
+    main.beat?.(position);
+  }
+
+  const baseline = engine.debugLoopBaseline()!;
+  const r = ((baseline - B) % L + L) % L;
+  const distFromGrid = Math.min(r, L - r); // how far the baseline sits from the nearest true boundary
+  expect(distFromGrid).toBeLessThanOrEqual(beatMs);
+});
+
+test("engine emits 'loopWrap' on the audio loop wrap (position decrease)", async () => {
+  // A wrap is the audio loop boundary: the beat position climbs through the loop, then drops back.
+  // (A decrease before half a loop has elapsed is the warm-up transient and is rejected — see the
+  // garbage-position test above.)
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
@@ -355,15 +395,15 @@ test("engine emits 'loopWrap' once elapsed reaches a loop length", async () => {
   await Promise.resolve();
   expect(beatboxes.length).toBeGreaterThanOrEqual(2);
 
-  beatboxes[1].handlers.play?.();             // loop baseline = 1000
-  mockNow = 1200; beatboxes[1].handlers.beat?.(0);
-  mockNow = 1499; beatboxes[1].handlers.beat?.(0);
-  expect(loopWrapSpy).not.toHaveBeenCalled(); // still < 500ms elapsed
-  mockNow = 1500; beatboxes[1].handlers.beat?.(0);
-  expect(loopWrapSpy).toHaveBeenCalledTimes(1); // exactly one loop length elapsed → wrap
+  beatboxes[1].handlers.play?.();              // loop baseline = 1000
+  mockNow = 1200; beatboxes[1].handlers.beat?.(400); // climbing within loop 1
+  mockNow = 1450; beatboxes[1].handlers.beat?.(900); // still climbing
+  expect(loopWrapSpy).not.toHaveBeenCalled();
+  mockNow = 1510; beatboxes[1].handlers.beat?.(0);   // position dropped → wrapped (elapsed 510 ≥ 250)
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1);
 });
 
-test("re-anchors the baseline after a wrap so it fires once per loop, not on every beat", async () => {
+test("re-anchors to the wrap and fires once per loop, not on every beat", async () => {
   const deps = makeDeps(true);
   const { factory, beatboxes } = makePositionedBeatboxFactory();
   let mockNow = 1000;
@@ -376,16 +416,18 @@ test("re-anchors the baseline after a wrap so it fires once per loop, not on eve
   await engine.start();
   beatboxes[0].handlers.stop?.();
   await Promise.resolve();
+  const main = beatboxes[1].handlers;
 
-  beatboxes[1].handlers.play?.();             // baseline = 1000
-  mockNow = 1500; beatboxes[1].handlers.beat?.(0);
-  expect(loopWrapSpy).toHaveBeenCalledTimes(1); // wrap #1; baseline re-anchored to 1500
-  // Later beats still inside the second iteration must not re-wrap.
-  mockNow = 1700; beatboxes[1].handlers.beat?.(0);
-  mockNow = 1999; beatboxes[1].handlers.beat?.(0);
+  main.play?.();                       // baseline = 1000
+  mockNow = 1450; main.beat?.(900);    // climbing
+  mockNow = 1510; main.beat?.(0);      // wrap #1 (decrease, elapsed 510 ≥ 250)
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
-  mockNow = 2000; beatboxes[1].handlers.beat?.(0);
-  expect(loopWrapSpy).toHaveBeenCalledTimes(2); // next loop boundary → wrap #2
+  // Positions climbing again within loop 2 must NOT re-wrap.
+  mockNow = 1700; main.beat?.(300);
+  mockNow = 1950; main.beat?.(900);
+  expect(loopWrapSpy).toHaveBeenCalledTimes(1);
+  mockNow = 2015; main.beat?.(0);      // next boundary (decrease, elapsed since 1510 = 505 ≥ 250) → wrap #2
+  expect(loopWrapSpy).toHaveBeenCalledTimes(2);
 });
 
 test("stop() detaches the main player's listeners so a stale beat can't reach a later session's scorer", async () => {

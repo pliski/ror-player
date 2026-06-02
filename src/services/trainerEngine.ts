@@ -171,21 +171,30 @@ export function createTrainerEngine(deps: TrainerEngineDeps, opts: TrainerEngine
     mainPlayer.setPattern(mainRaw);
     mainPlayer.setBeatLength(60_000 / cfg.speedBpm / config.playTime);
     mainPlayer.setRepeat(true);
-    // Loop-wrap detection is time-based, NOT position-based. A brand-new AudioContext can
-    // report a garbage beat position before its output clock settles (live trace saw 7373,
-    // then a snap to 0); the old `position < lastBeatPosition` test misread that snap-back as a
-    // loop boundary ~15ms in and pushed a full empty loop of phantom misses into the scorer. A
-    // real wrap is one loopLengthMs after the baseline — detect it from elapsed time, re-anchoring
-    // the baseline each loop so per-beat jitter can't accumulate.
+    // Re-anchor the loop baseline on the REAL audio loop wrap — the beat whose position drops
+    // (the audio clock wrapped to the top of the loop). Anchoring to elapsed time instead let the
+    // per-loop overshoot accumulate, dragging the baseline progressively late so every hit read
+    // earlier and earlier. The position signal IS the authoritative loop clock; its one hazard is
+    // the AudioContext warm-up, where the first beats can report a garbage position (live trace:
+    // 7373) that snaps to 0 ~15ms in and looks like a wrap — so only accept a wrap once at least
+    // half a loop has actually elapsed, which rejects that startup transient.
+    let lastBeatPosition = -1;
     const onPlay = () => {
       loopBaselinePerf = now();
+      lastBeatPosition = -1;
     };
-    const onBeat = () => {
-      if (loopBaselinePerf !== null && now() - loopBaselinePerf >= loopLengthMs) {
+    const onBeat = (position: number) => {
+      if (
+        loopBaselinePerf !== null &&
+        lastBeatPosition >= 0 &&
+        position < lastBeatPosition &&
+        now() - loopBaselinePerf >= loopLengthMs * 0.5
+      ) {
         loopBaselinePerf = now();
         scorer?.onLoopWrap();
         events.emit("loopWrap", {});
       }
+      lastBeatPosition = position;
     };
     mainPlayer.on("play", onPlay);
     mainPlayer.on("beat", onBeat);
