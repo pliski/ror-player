@@ -263,6 +263,31 @@ test("createScorer trims tail when finalize(tailMs) given", () => {
   expect(s.stats().hits).toBe(1);
 });
 
+test("finalize: strokes after the stop point (never reached) are not counted as misses", () => {
+  // Stop 50ms into a single loop. Only stroke t=0 has come around; strokes t=100/200/300
+  // are still in the future and never played. The live path at elapsed=50 correctly shows
+  // 0 misses — finalize must AGREE, not retroactively count the un-played future strokes.
+  // This is the "stop → Misses jumps to a full loop" over-count.
+  const s = createScorer(monoTimeline);
+  s.acceptHit({ t: 0, energy: 1 }); // played the only reachable stroke, on time
+  const live = s.stats({ currentLoopElapsedMs: 50 });
+  expect(live.misses).toBe(0); // sanity: live path is correct
+  s.finalize({ stopAtMs: 50, tailMs: 500 });
+  expect(s.stats().misses).toBe(0); // future strokes must NOT become misses at finalize
+});
+
+test("finalize: completed loops count in full, the partial final loop only counts reached strokes", () => {
+  // Unified rule: every COMPLETED loop is scored in full ("keep counting every loop"),
+  // but the in-progress loop at stop only counts strokes the metronome actually reached.
+  // monoTimeline: strokes 0/100/200/300, loopLen 400.
+  const s = createScorer(monoTimeline);
+  s.onLoopWrap();                          // loop 1: played nothing → completes → 4 misses, in full
+  s.finalize({ stopAtMs: 150, tailMs: 0 }); // loop 2: stopped 150ms in → only strokes t=0,100 reached
+  // 4 (full completed loop) + 2 (reached strokes 0,100 in the final loop) = 6.
+  // Before the fix the final loop also counted strokes 200/300 → 8.
+  expect(s.stats().misses).toBe(6);
+});
+
 test("createScorer stats() before finalize returns live approximation", () => {
   const timeline = {
     expected: [{ strokeIdx: 0, t: 0 }],

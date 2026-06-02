@@ -243,6 +243,29 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
     return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: bestDelta, wrapped };
   }
 
+  // Single source of truth for turning the bucketed detections into a MatchResult — shared by
+  // live stats() and finalize(), so the totals can never disagree between the two. COMPLETED
+  // loops are always scored in full: every loop the metronome finished is fully judged ("keep
+  // counting every loop"). The IN-PROGRESS loop always matches against the full timeline (so a
+  // just-landed on-time hit binds to its stroke immediately instead of flickering as an "extra"
+  // until its window closes), but a stroke only becomes a MISS once its window has closed by
+  // `currentMissCutoffMs`; strokes the metronome has not yet reached are never misses. Pass
+  // Infinity to judge the whole in-progress loop.
+  function buildSessionMatch(currentMissCutoffMs: number): MatchResult {
+    const merged: MatchResult = { matched: [], misses: [], extras: [] };
+    for (const loopDet of completedLoops) {
+      const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
+      merged.matched.push(...r.matched);
+      merged.misses.push(...r.misses);
+      merged.extras.push(...r.extras);
+    }
+    const rCur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
+    merged.matched.push(...rCur.matched);
+    merged.extras.push(...rCur.extras);
+    merged.misses.push(...rCur.misses.filter((e) => e.t <= currentMissCutoffMs));
+    return merged;
+  }
+
   return {
     acceptHit(hit) {
       if (finalized) return null;
@@ -257,55 +280,18 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
     finalize(opts) {
       if (finalized) return;
       finalized = true;
-
-      const trimmedExpected = opts
-        ? timeline.expected.filter((e) => !(e.t > opts.stopAtMs - opts.tailMs && e.t <= opts.stopAtMs))
-        : timeline.expected;
-      const trimmedCurrentLoop = opts
-        ? currentLoopDetected.filter((d) => !(d.t > opts.stopAtMs - opts.tailMs && d.t <= opts.stopAtMs))
-        : currentLoopDetected;
-
-      // Completed loops played to completion — match against full expected.
-      const merged: MatchResult = { matched: [], misses: [], extras: [] };
-      for (const loopDet of completedLoops) {
-        const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-        merged.matched.push(...r.matched);
-        merged.misses.push(...r.misses);
-        merged.extras.push(...r.extras);
-      }
-      // Current (possibly trimmed) loop — match against trimmed expected.
-      const rFinal = matchHits(trimmedCurrentLoop, trimmedExpected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-      merged.matched.push(...rFinal.matched);
-      merged.misses.push(...rFinal.misses);
-      merged.extras.push(...rFinal.extras);
-
-      finalMatch = merged;
+      // Stop grace: a stroke within tailMs before the stop isn't judged (the user stopped
+      // mid-flow), and strokes after the stop never played — both fall outside the cutoff at
+      // stopAtMs - tailMs. No opts → judge the whole in-progress loop.
+      finalMatch = buildSessionMatch(opts ? opts.stopAtMs - opts.tailMs : Infinity);
     },
     stats(opts) {
-      if (!finalized) {
-        // Completed loops played to completion — counted in full.
-        const merged: MatchResult = { matched: [], misses: [], extras: [] };
-        for (const loopDet of completedLoops) {
-          const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-          merged.matched.push(...r.matched);
-          merged.misses.push(...r.misses);
-          merged.extras.push(...r.extras);
-        }
-        // In-progress loop: match against the FULL timeline so a just-landed on-time hit binds
-        // to its stroke immediately (matching a filtered subset would brand it a fleeting "extra"
-        // until its window closed — the counter flicker). The elapsed cutoff is then applied only
-        // to MISSES, so a not-yet-reached stroke is still never prematurely counted as missed.
-        // Absent elapsed (e.g. not in gameOn) → legacy behaviour: count the whole loop.
-        const elapsed = opts?.currentLoopElapsedMs ?? null;
-        const rCur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-        merged.matched.push(...rCur.matched);
-        merged.extras.push(...rCur.extras);
-        merged.misses.push(...(elapsed === null
-          ? rCur.misses
-          : rCur.misses.filter((e) => e.t <= elapsed - windowMs)));
-        return scoreSession(merged, timeline.toleranceMs);
-      }
-      return scoreSession(finalMatch, timeline.toleranceMs);
+      if (finalized) return scoreSession(finalMatch, timeline.toleranceMs);
+      // Live: a stroke is a miss only once its full timing window has closed (elapsed - windowMs).
+      // Absent elapsed (e.g. not in gameOn) → judge the whole loop (legacy guard).
+      const elapsed = opts?.currentLoopElapsedMs ?? null;
+      const cutoff = elapsed === null ? Infinity : elapsed - windowMs;
+      return scoreSession(buildSessionMatch(cutoff), timeline.toleranceMs);
     },
   };
 }
