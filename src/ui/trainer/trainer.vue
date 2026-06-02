@@ -182,6 +182,13 @@
 	let statsTimer: number | null = null;
 	watch(trainerState, (s) => {
 		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+		// Entering a new session: clear the prior run's final totals immediately. The engine
+		// has already torn down its scorer by requestingMic, so engine.stats() reads zeros.
+		// Without this the rail keeps showing last session's misses until the first poll lands
+		// ~100ms into count-in — the "new session starts with 9 misses" flash.
+		if (s === "requestingMic" || s === "countIn") {
+			stats.value = engine.stats();
+		}
 		if (s === "gameOn" || s === "countIn") {
 			statsTimer = window.setInterval(() => { stats.value = engine.stats(); }, 100);
 		} else if (s === "results") {
