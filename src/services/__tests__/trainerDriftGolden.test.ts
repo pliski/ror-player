@@ -32,7 +32,6 @@ function makeFakeBeatbox(): { ref: BeatboxReference; player: Beatbox } {
     on: vi.fn(),
     play: vi.fn(),
     stop: vi.fn(),
-    getPosition: vi.fn(() => 0),
   } as unknown as Beatbox;
   const ref: BeatboxReference = { id: -1, playing: false, customPosition: false };
   return { ref, player };
