@@ -361,12 +361,13 @@ test("loop baseline tracks the audio wrap and does not drift over many loops", a
   mockNow = B;
   main.play?.(); // baseline anchored at the true start B
 
+  const STROKE_MS = 125; // L / strokes-per-loop (500 / 4); production reports a floored stroke index, not a per-mille
   const LOOPS = 8;
   // Feed beats at a fixed cadence; position is derived from the true audio loop phase, so it
   // decreases (wraps high→0) exactly at each true boundary B + k*L.
   for (let t = B + beatMs; t <= B + LOOPS * L + L; t += beatMs) {
-    const phase = (t - B) % L;                       // 0..L-1
-    const position = Math.floor((phase / L) * 1000); // 0..999, decreases at each boundary
+    const phase = (t - B) % L;                         // 0..L-1
+    const position = Math.floor(phase / STROKE_MS);    // stroke index 0..3 (upbeat 0); resets to 0 at each boundary
     mockNow = t;
     main.beat?.(position);
   }
@@ -396,8 +397,8 @@ test("engine emits 'loopWrap' on the audio loop wrap (position decrease)", async
   expect(beatboxes.length).toBeGreaterThanOrEqual(2);
 
   beatboxes[1].handlers.play?.();              // loop baseline = 1000
-  mockNow = 1200; beatboxes[1].handlers.beat?.(400); // climbing within loop 1
-  mockNow = 1450; beatboxes[1].handlers.beat?.(900); // still climbing
+  mockNow = 1200; beatboxes[1].handlers.beat?.(1); // climbing within loop 1 (stroke index 1)
+  mockNow = 1450; beatboxes[1].handlers.beat?.(3); // still climbing (stroke index 3)
   expect(loopWrapSpy).not.toHaveBeenCalled();
   mockNow = 1510; beatboxes[1].handlers.beat?.(0);   // position dropped → wrapped (elapsed 510 ≥ 250)
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
@@ -419,12 +420,12 @@ test("re-anchors to the wrap and fires once per loop, not on every beat", async 
   const main = beatboxes[1].handlers;
 
   main.play?.();                       // baseline = 1000
-  mockNow = 1450; main.beat?.(900);    // climbing
+  mockNow = 1450; main.beat?.(3);      // climbing (stroke index 3)
   mockNow = 1510; main.beat?.(0);      // wrap #1 (decrease, elapsed 510 ≥ 250)
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
   // Positions climbing again within loop 2 must NOT re-wrap.
-  mockNow = 1700; main.beat?.(300);
-  mockNow = 1950; main.beat?.(900);
+  mockNow = 1700; main.beat?.(1);
+  mockNow = 1950; main.beat?.(3);
   expect(loopWrapSpy).toHaveBeenCalledTimes(1);
   mockNow = 2015; main.beat?.(0);      // next boundary (decrease, elapsed since 1510 = 505 ≥ 250) → wrap #2
   expect(loopWrapSpy).toHaveBeenCalledTimes(2);
