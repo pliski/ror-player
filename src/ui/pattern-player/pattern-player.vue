@@ -80,8 +80,9 @@
 	const upbeatBeats = computed(() => Math.ceil(pattern.value.upbeat / pattern.value.time));
 
 	// Multi-line v2: container-width-driven balanced rows.
-	// Cell width is locked (CSS --bb-cell-width: 30px) so naturalWidth is pure arithmetic
-	// and column alignment across measure-tables is pixel-perfect.
+	// CELL_WIDTH_PX feeds both the row-balancing arithmetic (naturalWidth) and the
+	// --bb-cell-width CSS custom property (set inline on the container), so all three
+	// sites — JS arithmetic, spacer width, and rendered stroke width — share one source.
 	const CELL_WIDTH_PX = 30;
 
 	// Tracked container width drives rowCount; updated via ResizeObserver below.
@@ -318,7 +319,7 @@
 			<button v-if="hasLocalChanges" type="button" class="btn btn-warning" @click="reset()"><fa icon="eraser"/>{{" "}}{{i18n.t("pattern-player.restore")}}</button>
 		</PatternPlayerToolbar>
 
-		<div class="bb-pattern-player-container" :class="{ 'multi-line-when-narrow': props.multiLineWhenNarrow }" ref="containerRef">
+		<div class="bb-pattern-player-container" :class="{ 'multi-line-when-narrow': props.multiLineWhenNarrow }" :style="{ '--bb-cell-width': CELL_WIDTH_PX + 'px' }" ref="containerRef">
 			<table v-if="!props.multiLineWhenNarrow" class="bb-pattern-player" :class="`time-${pattern.time}`">
 				<thead>
 					<tr>
@@ -353,7 +354,7 @@
 
 			<div v-else class="bb-pattern-player-rows">
 				<div v-for="row in rowGroups" :key="row.rowIdx" class="bb-pattern-player-row">
-					<div v-if="row.leadingSpacerCells > 0" class="bb-pattern-player-row-spacer" :style="{ width: (row.leadingSpacerCells * 30) + 'px' }"></div>
+					<div v-if="row.leadingSpacerCells > 0" class="bb-pattern-player-row-spacer" :style="{ width: (row.leadingSpacerCells * CELL_WIDTH_PX) + 'px' }"></div>
 					<table v-for="measure in row.measures" :key="measure.index" class="bb-pattern-player bb-pattern-player-measure" :class="`time-${pattern.time}`">
 						<thead>
 							<tr>
@@ -420,8 +421,6 @@
 		// a leading spacer (for rows 2+ when the pattern has an upbeat — aligns measure 5
 		// column-wise under measure 1, etc.).
 		&.multi-line-when-narrow {
-			--bb-cell-width: 30px;
-
 			.bb-pattern-player-rows {
 				display: flex;
 				flex-direction: column;
@@ -435,7 +434,7 @@
 			}
 			.bb-pattern-player-row-spacer {
 				flex-shrink: 0;
-				// width is set inline from rowGroups (leadingSpacerCells * 30 px).
+				// width is set inline from rowGroups (leadingSpacerCells * CELL_WIDTH_PX).
 			}
 			.bb-pattern-player-measure {
 				flex: 0 0 auto;
