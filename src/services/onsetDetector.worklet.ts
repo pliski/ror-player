@@ -1,5 +1,5 @@
 /// <reference types="@types/audioworklet" />
-import { createDetectorState, processBlock, DetectorParams, DetectorState, DEFAULT_DETECTOR_PARAMS } from "./onsetDetectorCore";
+import { createDetectorState, processBlock, DetectorParams, DetectorState, DEFAULT_DETECTOR_PARAMS, effectiveMultiplier } from "./onsetDetectorCore";
 
 interface WorkletMessage {
   type: "onset";
@@ -19,14 +19,14 @@ class OnsetDetectorProcessor extends AudioWorkletProcessor {
     this.userSensitivity = params.userSensitivity ?? DEFAULT_DETECTOR_PARAMS.userSensitivity;
     this.baseMultiplier = params.multiplier ?? DEFAULT_DETECTOR_PARAMS.multiplier;
     this.state = createDetectorState({
-      multiplier: this.baseMultiplier / this.userSensitivity,
+      multiplier: effectiveMultiplier(this.baseMultiplier, this.userSensitivity),
       refractoryFrames: params.refractoryFrames ?? DEFAULT_DETECTOR_PARAMS.refractoryFrames, // ~50 ms at 48kHz, 128-sample blocks
     });
 
     this.port.onmessage = (e: MessageEvent) => {
       if (e.data?.type === "setSensitivity") {
         this.userSensitivity = e.data.value;
-        this.state.params.multiplier = (e.data.baseMultiplier ?? this.baseMultiplier) / this.userSensitivity;
+        this.state.params.multiplier = effectiveMultiplier(e.data.baseMultiplier ?? this.baseMultiplier, this.userSensitivity);
       }
     };
   }

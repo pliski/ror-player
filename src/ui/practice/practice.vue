@@ -74,6 +74,7 @@
 	const mode = ref<PracticeMode>("instrument");
 	const latencyMs = ref(0);
 	const difficulty = ref<Difficulty>("easy");
+	const sensitivity = ref(1);
 	const speedBpm = ref(config.defaultSpeed);
 	const calibrationOpen = ref(false);
 	const permissionOpen = ref(false);
@@ -109,7 +110,7 @@
 		if (speedBpm.value === prevDefault) speedBpm.value = newPat.speed;
 	}, { immediate: true });
 
-	watch([currentPattern, instrument, mode, speedBpm, difficulty], () => {
+	watch([currentPattern, instrument, mode, speedBpm, difficulty, sensitivity], () => {
 		if (currentPattern.value && instrument.value) {
 			engine.configure({
 				pattern: currentPattern.value,
@@ -117,11 +118,12 @@
 				speedBpm: speedBpm.value,
 				mode: mode.value,
 				difficulty: difficulty.value,
+				sensitivity: sensitivity.value,
 			});
 		}
 	}, { immediate: true });
 
-	watch([instrument, mode, tuneName, patternName, latencyMs, difficulty], () => {
+	watch([instrument, mode, tuneName, patternName, latencyMs, difficulty, sensitivity], () => {
 		settings.value = {
 			...settings.value,
 			lastInstrument: instrument.value,
@@ -130,6 +132,7 @@
 			lastPatternName: patternName.value,
 			latencyOffsetMs: latencyMs.value,
 			difficulty: difficulty.value,
+			sensitivity: sensitivity.value,
 		};
 	}, { deep: false });
 
@@ -140,6 +143,7 @@
 	mode.value = s.lastMode;
 	latencyMs.value = s.latencyOffsetMs;
 	difficulty.value = s.difficulty;
+	sensitivity.value = s.sensitivity;
 
 	async function handleStart() {
 		if (!settings.value.headphonesWarningAcked) {

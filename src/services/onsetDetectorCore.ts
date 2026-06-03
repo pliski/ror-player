@@ -29,8 +29,9 @@ export const MIN_NOISE_FLOOR = 0.015;
 // Ceiling (× noise floor) below which the floor is allowed to LEARN. Kept well
 // under the trigger (floor × multiplier) so a hit's loud body or decay tail can
 // never drag the floor — and thus the threshold — upward; that positive feedback
-// is what silenced detection after a few loops. Capped at `multiplier` so it can
-// never reach the trigger even at high user sensitivity (multiplier < 1.5).
+// is what silenced detection after a few loops. processBlock caps the learn window at the live
+// (effective) multiplier — base ÷ userSensitivity, which drops toward 1 at max sensitivity — so
+// the floor can never learn up to the trigger even when sensitivity pulls that multiplier < 1.5.
 export const LEARN_RATIO = 1.5;
 
 // Post-hit decay gate. A resonant drum (Surdo) or a flam/tail (Repi, snare)
@@ -42,6 +43,12 @@ export const LEARN_RATIO = 1.5;
 // Frames assume ~48 kHz / 128-sample blocks (≈300 ms); tuned against captured logs.
 export const DECAY_GATE_RATIO = 0.5;
 export const DECAY_GATE_FRAMES = 112;
+
+/** Trigger multiplier after the user's sensitivity trim: threshold = noiseFloor × this. Higher
+ *  sensitivity → lower multiplier → hotter (catches softer hits, admits more false positives). */
+export function effectiveMultiplier(baseMultiplier: number, userSensitivity: number): number {
+  return baseMultiplier / userSensitivity;
+}
 
 /** Single source of the three detector params. A caller may omit any of them
  *  (e.g. `detector.start(stream, {})`); the host resolves the fallback here and

@@ -25,6 +25,7 @@ export interface PracticeConfig {
   speedBpm: number;
   mode: PracticeMode;
   difficulty?: Difficulty;
+  sensitivity?: number;
 }
 
 export interface PracticeEngineDeps {
@@ -221,7 +222,7 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
         activeStream = null;
         return;
       }
-      await deps.detector.start(activeStream, {});
+      await deps.detector.start(activeStream, { userSensitivity: cfg?.sensitivity });
       // stop() may have been called while we were awaiting the detector
       if ((state.value as PracticeState) === "idle") return;
       setupScorerAndDetector();

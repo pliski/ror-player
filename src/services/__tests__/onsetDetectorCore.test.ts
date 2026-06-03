@@ -1,5 +1,11 @@
 import { expect, it, test } from "vitest";
-import { rmsOfBlock, createDetectorState, processBlock, MIN_NOISE_FLOOR, DEFAULT_DETECTOR_PARAMS } from "../onsetDetectorCore";
+import { rmsOfBlock, createDetectorState, processBlock, MIN_NOISE_FLOOR, DEFAULT_DETECTOR_PARAMS, effectiveMultiplier } from "../onsetDetectorCore";
+
+test("effectiveMultiplier trims the trigger inversely with user sensitivity", () => {
+  expect(effectiveMultiplier(3, 1)).toBe(3);     // neutral
+  expect(effectiveMultiplier(3, 3)).toBe(1);     // hottest (max sensitivity)
+  expect(effectiveMultiplier(3, 0.3)).toBe(10);  // coldest (min sensitivity)
+});
 
 it("exposes the single source of host↔worklet detector defaults", () => {
   expect(DEFAULT_DETECTOR_PARAMS).toEqual({ multiplier: 3, refractoryFrames: 19, userSensitivity: 1 });
