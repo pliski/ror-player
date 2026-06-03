@@ -26,6 +26,7 @@
 	import HeadphonesButton from "../playback-settings/headphones-button.vue";
 	import AbstractPlayer, { PositionData } from "../utils/abstract-player.vue";
 	import { useI18n } from "../../services/i18n";
+	import type { Verdict } from "../../services/practiceScorer";
 
 	type StrokeDropdownInfo = {
 		instr: Instrument,
@@ -49,6 +50,7 @@
 		onlyInstrument?: Instrument;
 		hidePlaybackControls?: boolean;
 		multiLineWhenNarrow?: boolean;
+		verdicts?: Map<number, Verdict>;
 	}>(), {
 		readonly: false,
 		hidePlaybackControls: false,
@@ -337,7 +339,18 @@
 							<HeadphonesButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 							<MuteButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
 						</td>
-						<StrokeCell v-for="i in pattern.length*pattern.time + pattern.upbeat" :key="i" :rawIdx="i-1" :instrumentKey="instrumentKey" :readonly="readonly" :char="config.strokes[pattern[instrumentKey][i-1]] || '\xa0'" :cellClass="getStrokeClass(i-1, instrumentKey)" :tooltip="config.strokesDescription[pattern[instrumentKey][i-1]]?.() || ''" @strokeClick="clickStroke(instrumentKey, i-1)" />
+						<StrokeCell
+							v-for="i in pattern.length*pattern.time + pattern.upbeat"
+							:key="i"
+							:rawIdx="i-1"
+							:instrumentKey="instrumentKey"
+							:readonly="readonly"
+							:char="config.strokes[pattern[instrumentKey][i-1]] || '\xa0'"
+							:cellClass="getStrokeClass(i-1, instrumentKey)"
+							:tooltip="config.strokesDescription[pattern[instrumentKey][i-1]]?.() || ''"
+							:verdict="props.verdicts?.get((i - 1) - pattern.upbeat)"
+							@strokeClick="clickStroke(instrumentKey, i-1)"
+						/>
 					</tr>
 				</tbody>
 			</table>
@@ -363,7 +376,18 @@
 									<HeadphonesButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 									<MuteButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
 								</td>
-								<StrokeCell v-for="i in measure.cellCount" :key="i" :rawIdx="measure.startStrokeIdx + i - 1" :instrumentKey="instrumentKey" :readonly="readonly" :char="config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'" :cellClass="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" :tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''" @strokeClick="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)" />
+								<StrokeCell
+									v-for="i in measure.cellCount"
+									:key="i"
+									:rawIdx="measure.startStrokeIdx + i - 1"
+									:instrumentKey="instrumentKey"
+									:readonly="readonly"
+									:char="config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'"
+									:cellClass="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)"
+									:tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''"
+									:verdict="props.verdicts?.get((measure.startStrokeIdx + i - 1) - pattern.upbeat)"
+									@strokeClick="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)"
+								/>
 							</tr>
 						</tbody>
 					</table>

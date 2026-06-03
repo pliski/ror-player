@@ -1,39 +1,19 @@
 <script setup lang="ts">
-	import { ref, watch } from "vue";
 	import PatternPlayer from "../pattern-player/pattern-player.vue";
 	import { type Verdict } from "../../services/practiceScorer";
 	import { Instrument } from "../../config";
 
-	const props = defineProps<{
+	defineProps<{
 		tuneName: string;
 		patternName: string;
 		instrument: Instrument;
 		verdicts?: Map<number, Verdict>;
 	}>();
-
-	const containerRef = ref<HTMLDivElement>();
-
-	function applyVerdicts() {
-		const el = containerRef.value;
-		if (!el) return;
-		el.querySelectorAll(".stroke.verdict-good, .stroke.verdict-off, .stroke.verdict-miss")
-			.forEach((n) => n.classList.remove("verdict-good", "verdict-off", "verdict-miss"));
-		if (!props.verdicts) return;
-		for (const [strokeIdx, v] of props.verdicts) {
-			// Descendant selector traverses all measure-table rows for this instrument
-			// (multi-line mode has N rows; single-line has 1). Stroke classes are globally
-			// unique so the matching cell is found regardless of which measure-table it's in.
-			const cell = el.querySelector(`tr[data-instrument="${props.instrument}"] .stroke-i-${strokeIdx}`);
-			if (cell) cell.classList.add(`verdict-${v}`);
-		}
-	}
-
-	watch([() => props.verdicts && [...props.verdicts], () => props.instrument], applyVerdicts, { immediate: true });
 </script>
 
 <template>
-	<div class="bb-practice-partition" ref="containerRef">
-		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" hidePlaybackControls multiLineWhenNarrow />
+	<div class="bb-practice-partition">
+		<PatternPlayer :tuneName="tuneName" :patternName="patternName" :readonly="true" :onlyInstrument="instrument" :verdicts="verdicts" hidePlaybackControls multiLineWhenNarrow />
 	</div>
 </template>
 
