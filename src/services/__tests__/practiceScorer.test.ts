@@ -374,6 +374,18 @@ test("toleranceForDifficulty scales DEFAULT_TOLERANCE per level", () => {
   expect(toleranceForDifficulty("hard")).toEqual({ good: 36, off: 90 });   // ×0.6
 });
 
+test("deltaToPosition: scales the marker position to the given tolerance", () => {
+  const hard = toleranceForDifficulty("hard"); // good 36, off 90
+  expect(deltaToPosition(90, hard).percent).toBe(0);   // a 90ms-late hit is at the late edge under hard
+  expect(deltaToPosition(0, hard).percent).toBe(50);   // on-time = centre
+  expect(deltaToPosition(90, hard).zone).toBe("off");  // 90 > good(36) → off
+  // same 90ms hit under the default (off=150) lands mid-meter, NOT at the edge — the bug this fixes
+  expect(deltaToPosition(90).percent).toBe(20);
+  // easy (off=263 after rounding): a 263ms-late hit reaches the edge
+  const easy = toleranceForDifficulty("easy"); // good 105, off 263
+  expect(deltaToPosition(263, easy).percent).toBe(0);
+});
+
 // Live stats are monotonic: a stroke is only counted once its timing window has
 // closed (t <= elapsed - windowMs). windowMs = 200 for DEFAULT_TOLERANCE.
 const monoTimeline = {

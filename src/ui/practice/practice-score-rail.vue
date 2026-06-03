@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { ref, computed } from "vue";
 	import { useI18n } from "../../services/i18n";
-	import { type SessionStats, type Verdict, type Difficulty, deltaToPosition } from "../../services/practiceScorer";
+	import { type SessionStats, type Verdict, type Difficulty, deltaToPosition, toleranceForDifficulty } from "../../services/practiceScorer";
 	import type { PracticeState } from "../../services/practiceEngine";
 
 	const props = defineProps<{
@@ -19,17 +19,28 @@
 	const detailsOpen = ref(false);
 	const isIdle = computed(() => props.state === "idle" && !props.disabledReason);
 
+	const tolerance = computed(() => toleranceForDifficulty(props.difficulty));
+
 	// Oldest → newest; age 0 = newest (brightest + pulses).
 	const markers = computed(() => {
 		const hits = props.recentHits ?? [];
 		return hits.map((h, i) => {
-			// Position is geometric (delta → percent); colour uses the scorer's
-			// authoritative verdict so it matches the partition and stays correct
-			// when the difficulty tolerance changes.
-			const { percent } = deltaToPosition(h.delta);
+			// Both position and colour scale with difficulty: position uses the tolerance
+			// so the marker lands correctly within the meter, and colour uses the scorer's
+			// authoritative verdict so it matches the partition and stays correct.
+			const { percent } = deltaToPosition(h.delta, tolerance.value);
 			const age = hits.length - 1 - i;
 			return { percent, verdict: h.verdict, age, opacity: age === 0 ? 1 : Math.max(0.18, 0.7 - age * 0.14) };
 		});
+	});
+
+	// The good zone as a fraction of the ±off meter. good and off scale by the same difficulty
+	// factor, so the ratio is ≈0.4 in practice (exactly 0.4 for normal/hard; 105/263 ≈ 0.399 for
+	// easy after integer rounding — a sub-pixel difference) — deriving it keeps the band aligned with
+	// the markers if a future difficulty changes the ratio meaningfully.
+	const meterZoneStyle = computed(() => {
+		const ratio = tolerance.value.good / tolerance.value.off;
+		return { left: (50 - ratio * 50) + "%", width: (ratio * 100) + "%" };
 	});
 </script>
 
@@ -41,7 +52,7 @@
 			<div v-else class="bb-practice-headline">{{ props.stats.headlineScore }}</div>
 
 			<div class="bb-practice-meter" :class="{ idle: isIdle }">
-				<div class="bb-practice-meter-zone"></div>
+				<div class="bb-practice-meter-zone" :style="meterZoneStyle"></div>
 				<div class="bb-practice-meter-center"></div>
 				<div
 					v-for="(m, idx) in markers"
@@ -128,7 +139,7 @@
 
 		.bb-practice-meter-zone {
 			position: absolute;
-			left: 30%; width: 40%; top: 0; bottom: 0;
+			top: 0; bottom: 0;
 			background: color-mix(in srgb, var(--bs-success) 18%, transparent);
 			border-left: 1px dashed var(--bs-success);
 			border-right: 1px dashed var(--bs-success);
