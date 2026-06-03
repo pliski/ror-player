@@ -16,10 +16,10 @@
 	import defaultTunes from "../../defaultTunes";
 	import { isEqual } from "lodash-es";
 	import StrokeDropdown from "./stroke-dropdown.vue";
+	import StrokeCell from "./stroke-cell.vue";
 	import { injectStateRequired } from "../../services/state";
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 	import { showConfirm } from "../utils/alert";
-	import vTooltip from "../utils/tooltip";
 	import { CustomPopover } from "../utils/popover.vue";
 	import PatternPlayerToolbar from "./pattern-player-toolbar.vue";
 	import MuteButton from "../playback-settings/mute-button.vue";
@@ -337,17 +337,7 @@
 							<HeadphonesButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 							<MuteButton :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
 						</td>
-						<td v-for="i in pattern.length*pattern.time + pattern.upbeat" :key="i" class="stroke" :class="getStrokeClass(i-1, instrumentKey)" v-tooltip="config.strokesDescription[pattern[instrumentKey][i-1]]?.() || ''">
-							<span v-if="readonly" class="stroke-inner">{{config.strokes[pattern[instrumentKey][i-1]] || '\xa0'}}</span>
-							<a v-if="!readonly"
-								href="javascript:" class="stroke-inner"
-								:id="`bb-pattern-player-stroke-${instrumentKey}-${i-1}`"
-								@click="clickStroke(instrumentKey, i-1)"
-								draggable="false"
-							>
-								{{config.strokes[pattern[instrumentKey][i-1]] || '\xa0'}}
-							</a>
-						</td>
+						<StrokeCell v-for="i in pattern.length*pattern.time + pattern.upbeat" :key="i" :rawIdx="i-1" :instrumentKey="instrumentKey" :readonly="readonly" :char="config.strokes[pattern[instrumentKey][i-1]] || '\xa0'" :cellClass="getStrokeClass(i-1, instrumentKey)" :tooltip="config.strokesDescription[pattern[instrumentKey][i-1]]?.() || ''" @strokeClick="clickStroke(instrumentKey, i-1)" />
 					</tr>
 				</tbody>
 			</table>
@@ -373,17 +363,7 @@
 									<HeadphonesButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" groupSurdos />
 									<MuteButton v-if="measure.index === 0" :instrument="instrumentKey" v-model:playbackSettings="playbackSettings" />
 								</td>
-								<td v-for="i in measure.cellCount" :key="i" class="stroke" :class="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" v-tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''">
-									<span v-if="readonly" class="stroke-inner">{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}</span>
-									<a v-if="!readonly"
-										href="javascript:" class="stroke-inner"
-										:id="`bb-pattern-player-stroke-${instrumentKey}-${measure.startStrokeIdx + i - 1}`"
-										@click="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)"
-										draggable="false"
-									>
-										{{config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'}}
-									</a>
-								</td>
+								<StrokeCell v-for="i in measure.cellCount" :key="i" :rawIdx="measure.startStrokeIdx + i - 1" :instrumentKey="instrumentKey" :readonly="readonly" :char="config.strokes[pattern[instrumentKey][measure.startStrokeIdx + i - 1]] || '\xa0'" :cellClass="getStrokeClass(measure.startStrokeIdx + i - 1, instrumentKey)" :tooltip="config.strokesDescription[pattern[instrumentKey][measure.startStrokeIdx + i - 1]]?.() || ''" @strokeClick="clickStroke(instrumentKey, measure.startStrokeIdx + i - 1)" />
 							</tr>
 						</tbody>
 					</table>
