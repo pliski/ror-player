@@ -530,6 +530,42 @@ test("liveVerdicts: with no elapsed (e.g. before gameOn) shows no misses", () =>
   expect(v.perStroke.size).toBe(0);
 });
 
+test("scoreSession: extras dock the score, clamped and never negative", () => {
+  const matched = [0, 1, 2, 3].map((i) => ({
+    d: { t: i * 125, energy: 0.5 }, e: { strokeIdx: i, t: i * 125 }, delta: 0, verdict: "good" as const,
+  }));
+  const clean = scoreSession({ matched, misses: [], extras: [] });
+  const sloppy = scoreSession({ matched, misses: [], extras: [{ t: 60, energy: 0.5 }, { t: 190, energy: 0.5 }] });
+  expect(clean.headlineScore).toBe(100);
+  // 4 expected, 2 extras → penalty = round(20 * 2/4) = 10 → 100 - 10 = 90
+  expect(sloppy.headlineScore).toBe(90);
+  expect(sloppy.headlineScore).toBeGreaterThanOrEqual(0);
+});
+
+test("scoreSession: the extras penalty is capped so a spray can't dominate the score", () => {
+  const matched = [0, 1].map((i) => ({
+    d: { t: i * 125, energy: 0.5 }, e: { strokeIdx: i, t: i * 125 }, delta: 0, verdict: "good" as const,
+  }));
+  const clean = scoreSession({ matched, misses: [], extras: [] });
+  const flooded = scoreSession({ matched, misses: [], extras: Array.from({ length: 50 }, (_, i) => ({ t: i, energy: 0.5 })) });
+  // 2 expected, 50 extras → penalty capped at 20 → 100 - 20 = 80
+  expect(flooded.headlineScore).toBe(80);
+  expect(clean.headlineScore - flooded.headlineScore).toBeLessThanOrEqual(20);
+  expect(flooded.headlineScore).toBeGreaterThanOrEqual(0);
+});
+
+test("scoreSession: extras penalty denominator uses hits+misses, not hits alone", () => {
+  // 2 hits + 2 misses → expectedTotal 4; 2 extras → penalty round(20 * 2/4) = 10.
+  const matched = [0, 1].map((i) => ({
+    d: { t: i * 125, energy: 0.5 }, e: { strokeIdx: i, t: i * 125 }, delta: 0, verdict: "good" as const,
+  }));
+  const misses = [{ strokeIdx: 2, t: 250 }, { strokeIdx: 3, t: 375 }];
+  const s = scoreSession({ matched, misses, extras: [{ t: 60, energy: 0.5 }, { t: 190, energy: 0.5 }] });
+  expect(s.expectedTotal).toBe(4);
+  // base = round(60 * 2/4 + 40 * 1) = 70; − penalty 10 = 60
+  expect(s.headlineScore).toBe(60);
+});
+
 test("extraStrokeIdx: rounds a stray hit to its nearest cell, upbeat-adjusted", () => {
   // strokeMs 125, upbeat 0, 4 cells. A hit at 130ms is nearest cell 1.
   expect(extraStrokeIdx(130, 125, 0, 4)).toBe(1);

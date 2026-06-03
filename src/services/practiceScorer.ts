@@ -209,6 +209,12 @@ export function matchHits(
   return { matched, misses, extras };
 }
 
+// Max points the extras penalty can dock (out of 100). The penalty ramps linearly to this at
+// extras == expectedTotal, then caps — so a spray of false positives can't bury an otherwise-good
+// score. Penalising extras is fair because the sensitivity slider lets a player cool a too-hot
+// detector (its false positives are what surface as extras).
+const EXTRAS_PENALTY_MAX = 20;
+
 export function scoreSession(
   match: MatchResult,
   tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
@@ -227,7 +233,13 @@ export function scoreSession(
 
   const hitRatio = expectedTotal === 0 ? 1 : hits / expectedTotal;
   const timingTightness = Math.max(0, Math.min(1, 1 - meanAbsDelta / tolerance.off));
-  const headlineScore = Math.round(60 * hitRatio + 40 * timingTightness);
+  // Spurious notes are a real fault for a timing trainer — dock a penalty proportional to extras
+  // as a fraction of the expected strokes (capped at EXTRAS_PENALTY_MAX). Gated on expectedTotal>0
+  // so an empty pattern can't divide by zero; the final score is clamped non-negative.
+  const extrasPenalty = expectedTotal === 0
+    ? 0
+    : Math.min(EXTRAS_PENALTY_MAX, Math.round(EXTRAS_PENALTY_MAX * (extras / expectedTotal)));
+  const headlineScore = Math.max(0, Math.round(60 * hitRatio + 40 * timingTightness) - extrasPenalty);
 
   return {
     hits, misses, extras, expectedTotal,
