@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer, deltaToPosition, toleranceForDifficulty } from "../practiceScorer";
+import { SILENT_STROKES, buildExpectedTimeline, matchHits, DEFAULT_TOLERANCE, scoreSession, createScorer, deltaToPosition, toleranceForDifficulty, extraStrokeIdx } from "../practiceScorer";
 import { normalizePattern } from "../../state/pattern";
 
 test("SILENT_STROKES matches the documented set", () => {
@@ -516,4 +516,21 @@ test("liveVerdicts: with no elapsed (e.g. before gameOn) shows no misses", () =>
   // yet (otherwise the highlight would flash every unplayed stroke as a miss before play starts).
   const v = s.liveVerdicts();
   expect(v.perStroke.size).toBe(0);
+});
+
+test("extraStrokeIdx: rounds a stray hit to its nearest cell, upbeat-adjusted", () => {
+  // strokeMs 125, upbeat 0, 4 cells. A hit at 130ms is nearest cell 1.
+  expect(extraStrokeIdx(130, 125, 0, 4)).toBe(1);
+  expect(extraStrokeIdx(60, 125, 0, 4)).toBe(0);   // rounds down to 0
+});
+
+test("extraStrokeIdx: subtracts the upbeat to match the verdicts-Map key", () => {
+  // upbeat 1, strokeMs 125. A hit at 250ms → raw cell 2 → key 2-1 = 1.
+  expect(extraStrokeIdx(250, 125, 1, 5)).toBe(1);
+  expect(extraStrokeIdx(10, 125, 1, 5)).toBe(-1); // early hit on the upbeat cell → key -1
+});
+
+test("extraStrokeIdx: returns null when the hit rounds outside the loop's cells", () => {
+  expect(extraStrokeIdx(99999, 125, 0, 4)).toBeNull();
+  expect(extraStrokeIdx(-50, 125, 0, 4)).toBeNull();
 });

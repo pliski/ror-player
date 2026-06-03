@@ -77,6 +77,25 @@ export function deltaToPosition(
   return { percent, zone };
 }
 
+/**
+ * Maps a stray hit's loop time to the partition cell it lands nearest, as the upbeat-adjusted
+ * strokeIdx key the verdicts Map uses — or null if it rounds outside the loop's cells. Lets the
+ * partition tint "where the stray note landed."
+ */
+export function extraStrokeIdx(
+  extraTimeMs: number,
+  strokeMs: number,
+  upbeat: number,
+  slotCount: number,
+): number | null {
+  // Guard the time, not rawIdx: Math.round(-0.4) is 0, so a pre-loop hit would otherwise land on
+  // cell 0. After this, rawIdx is always >= 0.
+  if (extraTimeMs < 0) return null;
+  const rawIdx = Math.round(extraTimeMs / strokeMs);
+  if (rawIdx >= slotCount) return null; // rounds onto/after the loop boundary — no cell there
+  return rawIdx - upbeat;
+}
+
 export function buildExpectedTimeline(
   pattern: Pattern,
   instrument: Instrument,

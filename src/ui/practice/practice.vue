@@ -12,7 +12,7 @@
 	import { createMicPermission } from "../../services/mediaPermissions";
 	import { createOnsetDetector } from "../../services/onsetDetector";
 	import type { Verdict, Difficulty } from "../../services/practiceScorer";
-	import { SILENT_STROKES } from "../../services/practiceScorer";
+	import { SILENT_STROKES, extraStrokeIdx } from "../../services/practiceScorer";
 	import { loadPracticeSettings } from "../../state/practiceSettings";
 	import { reactiveLocalStorage } from "../../services/localStorage";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
@@ -200,7 +200,21 @@
 	const recentHits = ref<{ delta: number; verdict: Verdict }[]>([]);
 	function pullVerdicts() {
 		const v = engine.verdicts();
-		verdicts.value = new Map([...v.perStroke].map(([k, x]) => [k, x.verdict]));
+		const map = new Map<number, Verdict>([...v.perStroke].map(([k, x]) => [k, x.verdict]));
+		// Place each stray hit on its nearest cell so the partition shows where it landed — but never
+		// overwrite an expected stroke's own good/off/miss verdict.
+		const pat = currentPattern.value;
+		if (pat) {
+			// strokeMs/slotCount MUST match buildExpectedTimeline() in practiceScorer.ts — if they
+			// drift, extras would tint the wrong cells while scored strokes stay correct.
+			const strokeMs = 60_000 / (speedBpm.value * pat.time);
+			const slotCount = pat.length * pat.time + pat.upbeat;
+			for (const ex of v.extras) {
+				const key = extraStrokeIdx(ex.t, strokeMs, pat.upbeat, slotCount);
+				if (key !== null && !map.has(key)) map.set(key, "extra");
+			}
+		}
+		verdicts.value = map;
 		recentHits.value = v.recent;
 	}
 
