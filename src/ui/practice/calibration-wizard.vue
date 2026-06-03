@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { ref, computed, onBeforeUnmount, watch } from "vue";
 	import { useI18n } from "../../services/i18n";
-	import { createLoopbackCalibration } from "../../services/loopbackCalibrator";
+	import { createLoopbackCalibration, DEFAULT_LOOPBACK_QUALITY } from "../../services/loopbackCalibrator";
 	import type { LoopbackCalibration, LoopbackResult } from "../../services/loopbackCalibrator";
 	import { createOnsetDetector, ctxTimeToPerfTime } from "../../services/onsetDetector";
 	import type { OnsetDetector } from "../../services/onsetDetector";
@@ -34,6 +34,11 @@
 		"mic-denied": "practice.calibration.fail-mic-denied",
 	};
 	const failKey = computed(() => FAIL_KEYS[failReason.value ?? "too-few"]);
+
+	const spreadIsMarginal = computed(() => {
+		const s = result.value?.spread ?? 0;
+		return s > DEFAULT_LOOPBACK_QUALITY.marginalSpread && s <= DEFAULT_LOOPBACK_QUALITY.maxSpread;
+	});
 
 	// Fixed calibration cadence: latency is a hardware property, not musical, so
 	// we use a slow, well-separated click train that the nearest-beat matcher
@@ -187,7 +192,7 @@
 					<p v-else-if="phase === 'done'">
 						{{ i18n.t("practice.calibration.result-median", { median: Math.round(result?.medianMs ?? 0) }) }}<br>
 						{{ i18n.t("practice.calibration.result-spread", { spread: Math.round(result?.spread ?? 0) }) }}<br>
-						<small v-if="(result?.spread ?? 0) > 30" class="text-warning">{{ i18n.t("practice.calibration.spread-warning") }}</small>
+						<small v-if="spreadIsMarginal" class="text-warning">{{ i18n.t("practice.calibration.spread-warning") }}</small>
 					</p>
 					<p v-else-if="phase === 'failed'" class="text-warning">
 						{{ i18n.t(failKey) }}

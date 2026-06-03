@@ -14,9 +14,11 @@ export interface LoopbackResult {
 export interface LoopbackQuality {
 	minCount: number;
 	maxSpread: number;
+	/** Spread above this (and ≤ maxSpread) shows a "noisy calibration" warning. Display-only; does not affect accept/reject. */
+	marginalSpread: number;
 }
 
-export const DEFAULT_LOOPBACK_QUALITY: LoopbackQuality = { minCount: 8, maxSpread: 25 };
+export const DEFAULT_LOOPBACK_QUALITY: LoopbackQuality = { minCount: 8, maxSpread: 25, marginalSpread: 15 };
 
 export interface LoopbackCalibration {
 	recordOnset(tPerf: number): void;

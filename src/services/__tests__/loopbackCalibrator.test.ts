@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createLoopbackCalibration } from "../loopbackCalibrator";
+import { createLoopbackCalibration, DEFAULT_LOOPBACK_QUALITY } from "../loopbackCalibrator";
 
 function beatsAt(n: number, spacingMs: number, start = 100_000): number[] {
   return Array.from({ length: n }, (_, i) => start + i * spacingMs);
@@ -48,6 +48,10 @@ test("rejects too-noisy spread", () => {
   expect(r.count).toBe(11);
   expect(r.accepted).toBe(false);
   expect(r.reason).toBe("too-noisy");
+});
+
+test("marginal spread band sits strictly inside the accept band", () => {
+  expect(DEFAULT_LOOPBACK_QUALITY.marginalSpread).toBeLessThan(DEFAULT_LOOPBACK_QUALITY.maxSpread);
 });
 
 test("ignores onsets outside the match window", () => {
