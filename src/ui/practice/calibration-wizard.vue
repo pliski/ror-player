@@ -133,7 +133,15 @@
 		if (phase.value !== "listening") { stopAudio(); return; }
 
 		ctx = new AudioContext();
+		// Strict-autoplay browsers may create the context suspended (user activation can lapse across
+		// the mic prompt); resume so the scheduled clicks actually play — else the mic hears nothing
+		// and the run fails as a silent "too-few".
+		await ctx.resume();
+		if (phase.value !== "listening") { stopAudio(); return; }
 		const beatSec = 60 / CAL_BPM;
+		// Pair currentTime with performance.now() to fix the ctx↔perf offset for click scheduling.
+		// getOutputTimestamp() (which the live detector uses mid-stream) is NOT usable here: on a
+		// just-created context, before any output has rendered, it reports a 0/empty timestamp.
 		const ctxNow = ctx.currentTime;
 		const perfAtCtxNow = performance.now();
 		const snap = { contextTime: ctxNow, performanceTime: perfAtCtxNow };

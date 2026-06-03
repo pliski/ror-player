@@ -55,10 +55,12 @@ export interface PracticeEngine {
   start(): Promise<void>;
   stop(): Promise<void>;
   stopGame(): Promise<void>;
+  /** @internal Test-only seam — no production callers (the UI reaches gameOn via the count-in "stop" path). */
   advanceToGameOn(baselineOverride?: number): Promise<void>;
   configure(c: PracticeConfig): void;
   stats(): SessionStats;
   verdicts(): LiveVerdicts;
+  /** @internal Test-only — exposes the loop baseline for deterministic timing assertions. */
   debugLoopBaseline(): number | null;
   on<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;
   off<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;

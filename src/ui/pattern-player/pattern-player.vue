@@ -113,11 +113,16 @@
 					measures.push({ index: m, startStrokeIdx: pattern.value.upbeat + m * pattern.value.time, cellCount: pattern.value.time });
 				}
 			}
-			groups.push({
-				rowIdx: r,
-				leadingSpacerCells: (r > 0 && pattern.value.upbeat > 0) ? pattern.value.upbeat : 0,
-				measures
-			});
+			// Skip empty trailing groups: when measuresPerRow packs all measures into fewer than
+			// rowCount rows (e.g. length 4, rowCount 3 → [0,1][2,3]), the last iterations have no
+			// measures — pushing them would render a stray empty row.
+			if (measures.length > 0) {
+				groups.push({
+					rowIdx: r,
+					leadingSpacerCells: (r > 0 && pattern.value.upbeat > 0) ? pattern.value.upbeat : 0,
+					measures
+				});
+			}
 		}
 		return groups;
 	});
