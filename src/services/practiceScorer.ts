@@ -29,6 +29,15 @@ export interface MatchResult {
   extras: DetectedHit[];
 }
 
+export interface LiveVerdicts {
+  /** current in-progress loop, per stroke: good/off (with delta) or miss (delta null) */
+  perStroke: Map<number, { verdict: "good" | "off" | "miss"; delta: number | null }>;
+  /** current-loop detected hits that matched no stroke (for the extra markers — Task 2.4) */
+  extras: DetectedHit[];
+  /** rolling last-N matched hits across the session, for the timing-meter trail */
+  recent: Array<{ delta: number; verdict: "good" | "off" }>;
+}
+
 export interface SessionStats {
   hits: number;
   misses: number;
@@ -212,6 +221,7 @@ export interface ScorerHandle {
   onLoopWrap(): void;
   finalize(opts?: { stopAtMs: number; tailMs: number }): void;
   stats(opts?: { currentLoopElapsedMs?: number | null }): SessionStats;
+  liveVerdicts(opts?: { currentLoopElapsedMs?: number | null }): LiveVerdicts;
 }
 
 export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
@@ -266,6 +276,33 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
     return merged;
   }
 
+  const RECENT_TRAIL = 5;
+
+  function liveVerdicts(opts?: { currentLoopElapsedMs?: number | null }): LiveVerdicts {
+    // A miss only lights once its window has PROVABLY closed. finalize() judges the whole loop
+    // (Infinity); while playing we derive the cutoff from elapsed; but with no elapsed yet (e.g.
+    // before gameOn anchors the loop baseline) we cannot know what has closed, so show NO misses
+    // (−Infinity) rather than flashing every unplayed stroke as missed.
+    const cutoff = finalized
+      ? Infinity
+      : (opts?.currentLoopElapsedMs == null ? -Infinity : opts.currentLoopElapsedMs - windowMs);
+    // Current in-progress loop only — the partition shows the loop being played; it clears when
+    // currentLoopDetected resets at the wrap. (After finalize this shows the last loop in full;
+    // the finalize() tail-trim that gates the COUNTS is not applied to the highlight — results-
+    // state polish is downstream in 2.3/2.4.)
+    const cur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
+    const perStroke = new Map<number, { verdict: "good" | "off" | "miss"; delta: number | null }>();
+    for (const m of cur.matched) perStroke.set(m.e.strokeIdx, { verdict: m.verdict, delta: m.delta });
+    for (const e of cur.misses) {
+      if (e.t <= cutoff && !perStroke.has(e.strokeIdx)) perStroke.set(e.strokeIdx, { verdict: "miss", delta: null });
+    }
+    // Rolling meter trail: last N matched across all loops (completed are fixed; current can
+    // reassign). Ordered by loop then within-loop stroke order, not strictly by hit-arrival time.
+    const all = buildSessionMatch(Infinity).matched;
+    const recent = all.slice(-RECENT_TRAIL).map((m) => ({ delta: m.delta, verdict: m.verdict }));
+    return { perStroke, extras: cur.extras, recent };
+  }
+
   return {
     acceptHit(hit) {
       if (finalized) return null;
@@ -293,5 +330,6 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
       const cutoff = elapsed === null ? Infinity : elapsed - windowMs;
       return scoreSession(buildSessionMatch(cutoff), timeline.toleranceMs);
     },
+    liveVerdicts,
   };
 }

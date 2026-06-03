@@ -433,3 +433,73 @@ test("live stats: absent elapsed counts the whole current loop (regression guard
   expect(st.misses).toBe(3); // strokes 1,2,3 unmatched
   expect(st.expectedTotal).toBe(4);
 });
+
+const twoStroke = {
+  expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 250 }],
+  loopLengthMs: 500,
+  toleranceMs: DEFAULT_TOLERANCE,
+};
+
+test("liveVerdicts: a matched hit yields a good verdict with its delta", () => {
+  const s = createScorer(twoStroke);
+  s.acceptHit({ t: 10, energy: 0.5 }); // 10ms late on stroke 0
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 300 });
+  expect(v.perStroke.get(0)).toEqual({ verdict: "good", delta: 10 });
+});
+
+test("liveVerdicts: an expected stroke past its closed window is a miss", () => {
+  const s = createScorer(twoStroke);
+  // No hit. windowMs = off+50 = 200. Stroke 0 (t=0) closes at elapsed 200; ask at 300.
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 300 });
+  expect(v.perStroke.get(0)).toEqual({ verdict: "miss", delta: null });
+});
+
+test("liveVerdicts: a stroke whose window has not closed is neither matched nor a miss", () => {
+  const s = createScorer(twoStroke);
+  // elapsed 100 < stroke 0 window close (200) → stroke 0 absent (not yet a miss).
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 100 });
+  expect(v.perStroke.has(0)).toBe(false);
+});
+
+test("liveVerdicts: a hit matching no stroke is an extra, not a verdict", () => {
+  // Use wider-spaced strokes so t=500 is genuinely outside windowMs=200 from both.
+  // Strokes at t=0 and t=1000, loopLen=2000, windowMs=200. Hit at t=500 is 500ms from each.
+  // Ask at elapsed=100 (cutoff=-100) so no stroke windows have closed yet → no misses in perStroke.
+  const wideStroke = {
+    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 1000 }],
+    loopLengthMs: 2000,
+    toleranceMs: DEFAULT_TOLERANCE,
+  };
+  const s = createScorer(wideStroke);
+  s.acceptHit({ t: 500, energy: 0.5 }); // between strokes, > windowMs=200 from both → extra
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 100 });
+  expect(v.perStroke.size).toBe(0);
+  expect(v.extras).toHaveLength(1);
+  expect(v.extras[0].t).toBe(500);
+});
+
+test("liveVerdicts: a closer later hit reassigns the earlier one to an extra", () => {
+  const s = createScorer(twoStroke);
+  s.acceptHit({ t: 40, energy: 0.5 });  // first, 40ms from stroke 0
+  s.acceptHit({ t: 5, energy: 0.5 });   // closer to stroke 0 → wins; the 40ms hit becomes an extra
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 300 });
+  expect(v.perStroke.get(0)?.delta).toBe(5);
+  expect(v.extras.map((e) => e.t)).toContain(40);
+});
+
+test("liveVerdicts: recent trail carries the last matched deltas across loops", () => {
+  const s = createScorer(twoStroke);
+  s.acceptHit({ t: 0, energy: 0.5 });   // loop 0 stroke 0
+  s.onLoopWrap();
+  s.acceptHit({ t: 250, energy: 0.5 }); // loop 1 stroke 1
+  const v = s.liveVerdicts({ currentLoopElapsedMs: 300 });
+  expect(v.recent.map((r) => r.verdict)).toEqual(["good", "good"]);
+});
+
+test("liveVerdicts: with no elapsed (e.g. before gameOn) shows no misses", () => {
+  const s = createScorer(twoStroke);
+  // No hits and no elapsed → we can't know any window has closed, so nothing is flagged missed
+  // yet (otherwise the highlight would flash every unplayed stroke as a miss before play starts).
+  const v = s.liveVerdicts();
+  expect(v.perStroke.size).toBe(0);
+});
