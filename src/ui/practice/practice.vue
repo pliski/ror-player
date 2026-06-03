@@ -123,6 +123,10 @@
 		}
 	}, { immediate: true });
 
+	// Apply a sensitivity change live to the running detector (a session restart would otherwise be
+	// needed; detector.setSensitivity posts to the worklet, a no-op when no session is active).
+	watch(sensitivity, (v) => detector.setSensitivity(v));
+
 	watch([instrument, mode, tuneName, patternName, latencyMs, difficulty, sensitivity], () => {
 		settings.value = {
 			...settings.value,
@@ -287,6 +291,7 @@
 					v-model:instrument="instrument"
 					v-model:mode="mode"
 					v-model:latencyMs="latencyMs"
+					v-model:sensitivity="sensitivity"
 					v-model:difficulty="difficulty"
 					v-model:speedBpm="speedBpm"
 					:state="practiceState"

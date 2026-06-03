@@ -7,6 +7,7 @@
 	import { PracticeState, PracticeMode } from "../../services/practiceEngine";
 	import HybridPopoverButton from "../utils/hybrid-popover-button.vue";
 	import LatencySlider from "./latency-slider.vue";
+	import SensitivitySlider from "./sensitivity-slider.vue";
 	import DifficultySelector from "./difficulty-selector.vue";
 	import SpeedSlider from "./speed-slider.vue";
 	import type { PartOption } from "./practiceParts";
@@ -19,6 +20,7 @@
 		mode: PracticeMode;
 		state: PracticeState;
 		latencyMs: number;
+		sensitivity: number;
 		difficulty: Difficulty;
 		speedBpm: number;
 		disabled?: boolean;
@@ -29,6 +31,7 @@
 		"update:instrument": [v: Instrument];
 		"update:mode": [v: PracticeMode];
 		"update:latencyMs": [v: number];
+		"update:sensitivity": [v: number];
 		"update:difficulty": [v: Difficulty];
 		"update:speedBpm": [v: number];
 		"start": [];
@@ -87,6 +90,7 @@
 			<template #button><fa icon="cog" /></template>
 			<SpeedSlider :modelValue="speedBpm" :defaultSpeed="pattern?.speed ?? config.defaultSpeed" @update:modelValue="emit('update:speedBpm', $event)" />
 			<LatencySlider class="mt-2" :modelValue="latencyMs" @update:modelValue="emit('update:latencyMs', $event)" @calibrate="emit('calibrate')" />
+			<SensitivitySlider class="mt-2" :modelValue="sensitivity" @update:modelValue="emit('update:sensitivity', $event)" />
 			<DifficultySelector class="mt-2" :modelValue="difficulty" @update:modelValue="emit('update:difficulty', $event)" />
 		</HybridPopoverButton>
 	</div>
