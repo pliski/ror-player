@@ -211,7 +211,7 @@ test("engine pipes detected hits into the scorer after gameOn", async () => {
   expect(engine.stats().hits).toBeGreaterThanOrEqual(1);
 });
 
-test("engine emits 'verdict' when the scorer matches a hit", async () => {
+test("verdicts(): an on-time hit shows a good verdict on its stroke", async () => {
   const deps = makeDeps(true);
   let onsetSub: ((e: any) => void) | null = null;
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
@@ -220,22 +220,9 @@ test("engine emits 'verdict' when the scorer matches a hit", async () => {
   const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
-
-  const verdictSpy = vi.fn();
-  engine.on("verdict", verdictSpy);
-
-  const baselinePerf = 1000;
-  await engine.advanceToGameOn(baselinePerf);
-
-  // Hit aligned to second expected stroke (t=250ms) → "good" verdict on strokeIdx 2
-  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
-
-  expect(verdictSpy).toHaveBeenCalledTimes(1);
-  const arg = verdictSpy.mock.calls[0][0];
-  expect(typeof arg.strokeIdx).toBe("number");
-  expect(["good", "off"]).toContain(arg.verdict);
-  // Hit at t=250 aligns exactly to the expected stroke at t=250 → delta 0.
-  expect(arg.delta).toBe(0);
+  await engine.advanceToGameOn(1000);
+  onsetSub!({ t_perf: 1000, energy: 0.5 }); // stroke 0, on time
+  expect(engine.verdicts().perStroke.get(0)?.verdict).toBe("good");
 });
 
 test("difficulty scales the scoring tolerance threaded into the timeline", async () => {
@@ -248,18 +235,15 @@ test("difficulty scales the scoring tolerance threaded into the timeline", async
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument", difficulty: "hard" });
   await engine.start();
 
-  const verdictSpy = vi.fn();
-  engine.on("verdict", verdictSpy);
-
   const baselinePerf = 1000;
   await engine.advanceToGameOn(baselinePerf);
 
   // Stroke at t=250ms; hit is 50ms late. Normal good=60 → "good"; Hard good=36 → "off".
   onsetSub!({ t_perf: baselinePerf + 300, energy: 0.5 });
 
-  expect(verdictSpy).toHaveBeenCalledTimes(1);
-  expect(verdictSpy.mock.calls[0][0].verdict).toBe("off");
-  expect(verdictSpy.mock.calls[0][0].delta).toBe(50);
+  // strokeIdx 2 is at t=250ms (index 2 in ["X",".",X","."]) — 50ms late → "off" under hard.
+  const v = engine.verdicts().perStroke.get(2);
+  expect(v?.verdict).toBe("off");
 });
 
 test("changing difficulty during gameOn resets to idle", async () => {
@@ -457,14 +441,13 @@ test("engine.off() removes the listener", async () => {
   let onsetSub: ((e: any) => void) | null = null;
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
 
-  const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
   const engine = createPracticeEngine(deps, makeDefaultOpts());
-  engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
+  engine.configure(makeDefaultConfig());
   await engine.start();
 
   const spy = vi.fn();
-  engine.on("verdict", spy);
-  engine.off("verdict", spy);
+  engine.on("verdictsChanged", spy);
+  engine.off("verdictsChanged", spy);
 
   const baselinePerf = 1000;
   await engine.advanceToGameOn(baselinePerf);
@@ -473,30 +456,31 @@ test("engine.off() removes the listener", async () => {
   expect(spy).not.toHaveBeenCalled();
 });
 
-test("verdict event flags an early downbeat (wrapped to loop end) as nextLoop", async () => {
+test("verdicts(): an early downbeat matches stroke 0 across the wrap", async () => {
   const deps = makeDeps(true);
   let onsetSub: ((e: any) => void) | null = null;
   deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
-
-  // strokeMs 125, loopLen 500; strokes at t=0 (idx 0) and t=250 (idx 2).
   const pattern = normalizePattern({ length: 1, time: 4, sn: ["X", ".", "X", "."] });
   const engine = createPracticeEngine(deps, makeDefaultOpts());
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
+  await engine.advanceToGameOn(1000);
+  onsetSub!({ t_perf: 1000 - 20, energy: 0.5 }); // 20ms before downbeat → circular match to stroke 0
+  expect(engine.verdicts().perStroke.get(0)?.verdict).toBe("good");
+});
 
+test("verdictsChanged fires on each onset", async () => {
+  const deps = makeDeps(true);
+  let onsetSub: ((e: any) => void) | null = null;
+  deps.detector.on = vi.fn((ev: string, cb: any) => { if (ev === "onset") onsetSub = cb; });
+  const engine = createPracticeEngine(deps, makeDefaultOpts());
+  engine.configure(makeDefaultConfig());
+  await engine.start();
+  await engine.advanceToGameOn(1000);
   const spy = vi.fn();
-  engine.on("verdict", spy);
-
-  const baselinePerf = 1000;
-  await engine.advanceToGameOn(baselinePerf);
-
-  // 20ms before the downbeat → tLoop ≈ loopLen-20, matched to stroke 0 across the wrap.
-  onsetSub!({ t_perf: baselinePerf - 20, energy: 0.5 });
-  expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ strokeIdx: 0, nextLoop: true }));
-
-  // A plain in-loop hit on stroke 2 is not a boundary crossing.
-  onsetSub!({ t_perf: baselinePerf + 250, energy: 0.5 });
-  expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ strokeIdx: 2, nextLoop: false }));
+  engine.on("verdictsChanged", spy);
+  onsetSub!({ t_perf: 1000, energy: 0.5 });
+  expect(spy).toHaveBeenCalled();
 });
 
 test("configure() during gameOn forces a reset to idle", async () => {

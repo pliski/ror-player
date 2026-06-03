@@ -2,7 +2,7 @@ import { Ref, ref } from "vue";
 import mitt, { Emitter } from "mitt";
 import { MicPermission } from "./mediaPermissions";
 import { OnsetDetector } from "./onsetDetector";
-import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, Verdict, toleranceForDifficulty, Difficulty } from "./practiceScorer";
+import { createScorer, ScorerHandle, buildExpectedTimeline, SessionStats, LiveVerdicts, toleranceForDifficulty, Difficulty } from "./practiceScorer";
 import config, { Instrument } from "../config";
 import { Pattern, normalizePattern } from "../state/pattern";
 import type Beatbox from "beatbox.js";
@@ -43,7 +43,9 @@ export interface PracticeEngineOpts {
 }
 
 export type PracticeEngineEvents = {
-  verdict: { strokeIdx: number; verdict: Verdict; delta: number; nextLoop: boolean };
+  /** Fired whenever the live verdict state may have changed: on each onset, and at each loop wrap. */
+  verdictsChanged: object;
+  /** The audio loop wrapped (boundary crossed). NB: `verdictsChanged` also co-fires at every wrap. */
   loopWrap: object;
 } & Record<string, unknown>;
 
@@ -55,6 +57,7 @@ export interface PracticeEngine {
   advanceToGameOn(baselineOverride?: number): Promise<void>;
   configure(c: PracticeConfig): void;
   stats(): SessionStats;
+  verdicts(): LiveVerdicts;
   debugLoopBaseline(): number | null;
   on<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;
   off<K extends keyof PracticeEngineEvents>(ev: K, h: (e: PracticeEngineEvents[K]) => void): void;
@@ -132,13 +135,8 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
       const loopLen = timeline.loopLengthMs;
       // Always-positive modulo (handles hits arriving before baseline)
       const tLoop = ((tRel % loopLen) + loopLen) % loopLen;
-      const verdict = scorer.acceptHit({ t: tLoop, energy: e.energy });
-      if (verdict && "strokeIdx" in verdict) {
-        // An early hit matched across the loop boundary belongs to the loop about to start, so
-        // the UI must keep its highlight through the imminent loop-wrap clear (see practice.vue).
-        const nextLoop = verdict.wrapped && verdict.delta < 0;
-        events.emit("verdict", { strokeIdx: verdict.strokeIdx, verdict: verdict.verdict, delta: verdict.delta, nextLoop });
-      }
+      scorer.acceptHit({ t: tLoop, energy: e.energy });
+      events.emit("verdictsChanged", {});
     };
     deps.detector.on("onset", onsetHandler);
   }
@@ -193,6 +191,7 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
         loopBaselinePerf = now();
         scorer?.onLoopWrap();
         events.emit("loopWrap", {});
+        events.emit("verdictsChanged", {});
       }
       lastBeatPosition = position;
     };
@@ -302,10 +301,21 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
       ?? { hits: 0, misses: 0, extras: 0, expectedTotal: 0, meanAbsDelta: 0, drift: 0, headlineScore: 100 };
   }
 
+  function verdicts(): LiveVerdicts {
+    // Unlike stats() above, pass null when not in a baseline-anchored gameOn loop: liveVerdicts maps
+    // absent-elapsed to a −Infinity cutoff (show NO misses), the right default for the highlight. Do
+    // NOT "align" this to stats()'s 0-guard — the two have opposite safe defaults (stats() passes 0
+    // because its scorer path treats null as "judge the whole loop").
+    const currentLoopElapsedMs = (state.value === "gameOn" && loopBaselinePerf !== null)
+      ? now() - loopBaselinePerf : null;
+    return scorer?.liveVerdicts({ currentLoopElapsedMs })
+      ?? { perStroke: new Map(), extras: [], recent: [] };
+  }
+
   function debugLoopBaseline(): number | null { return loopBaselinePerf; }
 
   return {
-    state, start, stop, stopGame, advanceToGameOn, configure, stats, debugLoopBaseline,
+    state, start, stop, stopGame, advanceToGameOn, configure, stats, verdicts, debugLoopBaseline,
     on: events.on.bind(events),
     off: events.off.bind(events),
   };

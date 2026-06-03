@@ -217,7 +217,7 @@ export function scoreSession(
 }
 
 export interface ScorerHandle {
-  acceptHit(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number; wrapped: boolean } | { verdict: "extra" } | null;
+  acceptHit(hit: DetectedHit): void;
   onLoopWrap(): void;
   finalize(opts?: { stopAtMs: number; tailMs: number }): void;
   stats(opts?: { currentLoopElapsedMs?: number | null }): SessionStats;
@@ -234,24 +234,6 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
   let finalized = false;
   let finalMatch: MatchResult = { matched: [], misses: [], extras: [] };
   const windowMs = timeline.toleranceMs.off + 50;
-
-  function bestGuess(hit: DetectedHit): { strokeIdx: number; verdict: "good" | "off"; delta: number; wrapped: boolean } | { verdict: "extra" } {
-    let bestI = -1;
-    let bestAbs = Infinity;
-    let bestDelta = 0;
-    for (let i = 0; i < timeline.expected.length; i++) {
-      // Circular delta: a hair-early downbeat lands at ≈loopLen but is really ≈0 from stroke 0.
-      const delta = circularDelta(hit.t, timeline.expected[i].t, timeline.loopLengthMs);
-      const abs = Math.abs(delta);
-      if (abs < bestAbs) { bestAbs = abs; bestI = i; bestDelta = delta; }
-    }
-    if (bestI < 0 || bestAbs > windowMs) return { verdict: "extra" };
-    const v: "good" | "off" = bestAbs <= timeline.toleranceMs.good ? "good" : "off";
-    // `wrapped` = the match was found across the loop boundary (raw hit and stroke are >½ loop
-    // apart). Lets the UI know this hit belongs to the loop on the *other* side of the wrap.
-    const wrapped = Math.abs(hit.t - timeline.expected[bestI].t) > timeline.loopLengthMs / 2;
-    return { strokeIdx: timeline.expected[bestI].strokeIdx, verdict: v, delta: bestDelta, wrapped };
-  }
 
   // Single source of truth for turning the bucketed detections into a MatchResult — shared by
   // live stats() and finalize(), so the totals can never disagree between the two. COMPLETED
@@ -298,6 +280,8 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
     }
     // Rolling meter trail: last N matched across all loops (completed are fixed; current can
     // reassign). Ordered by loop then within-loop stroke order, not strictly by hit-arrival time.
+    // (buildSessionMatch re-matches the current loop a second time here — deterministic and cheap at
+    // real session lengths, so accepted rather than threading `cur` through buildSessionMatch.)
     const all = buildSessionMatch(Infinity).matched;
     const recent = all.slice(-RECENT_TRAIL).map((m) => ({ delta: m.delta, verdict: m.verdict }));
     return { perStroke, extras: cur.extras, recent };
@@ -305,9 +289,8 @@ export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
 
   return {
     acceptHit(hit) {
-      if (finalized) return null;
+      if (finalized) return;
       currentLoopDetected.push(hit);
-      return bestGuess(hit);
     },
     onLoopWrap() {
       if (finalized) return;

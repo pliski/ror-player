@@ -187,7 +187,10 @@
 			stats.value = engine.stats();
 		}
 		if (s === "gameOn" || s === "countIn") {
-			statsTimer = window.setInterval(() => { stats.value = engine.stats(); }, 100);
+			// Poll stats + verdicts at ~10 Hz. verdictsChanged also pulls verdicts instantly on each
+			// hit/wrap; this poll is the catch-up path so a stroke turning into a miss as its window
+			// closes (with no new onset) still surfaces. Both pulls are idempotent.
+			statsTimer = window.setInterval(() => { stats.value = engine.stats(); pullVerdicts(); }, 100);
 		} else if (s === "results") {
 			stats.value = engine.stats();
 		}
@@ -195,24 +198,10 @@
 
 	const verdicts = ref<Map<number, Verdict>>(new Map());
 	const recentHits = ref<{ delta: number; verdict: Verdict }[]>([]);
-	// A downbeat hit a hair early matches the loop about to start, but its verdict can arrive
-	// just *before* the loop-wrap clear. The engine flags it `nextLoop`; we let that one stroke
-	// survive the next wrap so its highlight isn't wiped the instant it lands. A subsequent
-	// in-loop hit cancels the carry-over, so a normal loop still clears fully.
-	let carryStroke: number | null = null;
-
-	function handleVerdict(e: { strokeIdx: number; verdict: Verdict; delta: number; nextLoop: boolean }) {
-		const next = new Map(verdicts.value);
-		next.set(e.strokeIdx, e.verdict);
-		verdicts.value = next;
-		recentHits.value = [...recentHits.value, { delta: e.delta, verdict: e.verdict }].slice(-5);
-		carryStroke = e.nextLoop ? e.strokeIdx : null;
-	}
-
-	function handleLoopWrap() {
-		const carried = carryStroke !== null ? verdicts.value.get(carryStroke) : undefined;
-		verdicts.value = carried !== undefined ? new Map([[carryStroke as number, carried]]) : new Map();
-		carryStroke = null;
+	function pullVerdicts() {
+		const v = engine.verdicts();
+		verdicts.value = new Map([...v.perStroke].map(([k, x]) => [k, x.verdict]));
+		recentHits.value = v.recent;
 	}
 
 	// Switching the part clears the live feedback so the previous part's stroke
@@ -226,14 +215,12 @@
 	watch(patternName, () => {
 		verdicts.value = new Map();
 		recentHits.value = [];
-		carryStroke = null;
 	});
 
 	watch(practiceState, (s, prev) => {
 		if (s === "countIn" && prev !== "countIn") {
 			verdicts.value = new Map();
 			recentHits.value = [];
-			carryStroke = null;
 		}
 	});
 
@@ -241,13 +228,11 @@
 		const raw = reactiveLocalStorage.bbPracticeSettings ?? null;
 		const { recovered, settings: recoveredSettings } = loadPracticeSettings(raw);
 		if (recovered) reactiveLocalStorage.bbPracticeSettings = JSON.stringify(recoveredSettings);
-		engine.on("verdict", handleVerdict);
-		engine.on("loopWrap", handleLoopWrap);
+		engine.on("verdictsChanged", pullVerdicts);
 	});
 
 	onBeforeUnmount(() => {
-		engine.off("verdict", handleVerdict);
-		engine.off("loopWrap", handleLoopWrap);
+		engine.off("verdictsChanged", pullVerdicts);
 		if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
 		void engine.stop();
 	});
