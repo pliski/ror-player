@@ -4,6 +4,7 @@ dist
 .pnp.*
 .stash/
 .superpowers/
+TODO.md
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
