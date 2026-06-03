@@ -43,6 +43,16 @@ export const LEARN_RATIO = 1.5;
 export const DECAY_GATE_RATIO = 0.5;
 export const DECAY_GATE_FRAMES = 112;
 
+/** Single source of the three detector params. A caller may omit any of them
+ *  (e.g. `detector.start(stream, {})`); the host resolves the fallback here and
+ *  forwards explicit values to the worklet, so the worklet's own `??` defaults
+ *  never run in production. Both sides import this instead of hardcoding copies. */
+export const DEFAULT_DETECTOR_PARAMS = {
+  multiplier: 3,
+  refractoryFrames: 19,
+  userSensitivity: 1,
+} as const;
+
 export function rmsOfBlock(block: Float32Array): number {
   if (block.length === 0) return 0;
   let sumSq = 0;

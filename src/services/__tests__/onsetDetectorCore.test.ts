@@ -1,5 +1,9 @@
-import { expect, test } from "vitest";
-import { rmsOfBlock, createDetectorState, processBlock, MIN_NOISE_FLOOR } from "../onsetDetectorCore";
+import { expect, it, test } from "vitest";
+import { rmsOfBlock, createDetectorState, processBlock, MIN_NOISE_FLOOR, DEFAULT_DETECTOR_PARAMS } from "../onsetDetectorCore";
+
+it("exposes the single source of host↔worklet detector defaults", () => {
+  expect(DEFAULT_DETECTOR_PARAMS).toEqual({ multiplier: 3, refractoryFrames: 19, userSensitivity: 1 });
+});
 
 test("rmsOfBlock: silent block", () => {
   expect(rmsOfBlock(new Float32Array(128))).toBe(0);

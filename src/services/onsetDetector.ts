@@ -2,6 +2,7 @@
 // eslint-disable-next-line import/default
 import workletUrl from "./onsetDetector.worklet.ts?worker&url";
 import mitt, { Emitter } from "mitt";
+import { DEFAULT_DETECTOR_PARAMS } from "./onsetDetectorCore";
 
 export interface ClockSnapshot {
   contextTime: number;      // seconds
@@ -30,7 +31,7 @@ export function createOnsetDetector(): OnsetDetector {
   let ctx: AudioContext | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let node: AudioWorkletNode | null = null;
-  let baseMultiplier = 3;
+  let baseMultiplier: number = DEFAULT_DETECTOR_PARAMS.multiplier;
 
   return {
     async start(stream, params) {
@@ -48,14 +49,14 @@ export function createOnsetDetector(): OnsetDetector {
         ctx = null;
         throw e;
       }
-      baseMultiplier = params.multiplier ?? 3;
+      baseMultiplier = params.multiplier ?? DEFAULT_DETECTOR_PARAMS.multiplier;
       node = new AudioWorkletNode(ctx, "onset-detector", {
         numberOfInputs: 1,
         numberOfOutputs: 0,
         processorOptions: {
           multiplier: baseMultiplier,
-          refractoryFrames: params.refractoryFrames ?? 19,
-          userSensitivity: params.userSensitivity ?? 1,
+          refractoryFrames: params.refractoryFrames ?? DEFAULT_DETECTOR_PARAMS.refractoryFrames,
+          userSensitivity: params.userSensitivity ?? DEFAULT_DETECTOR_PARAMS.userSensitivity,
         },
       });
 

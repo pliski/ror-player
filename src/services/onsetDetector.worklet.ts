@@ -1,5 +1,5 @@
 /// <reference types="@types/audioworklet" />
-import { createDetectorState, processBlock, DetectorParams, DetectorState } from "./onsetDetectorCore";
+import { createDetectorState, processBlock, DetectorParams, DetectorState, DEFAULT_DETECTOR_PARAMS } from "./onsetDetectorCore";
 
 interface WorkletMessage {
   type: "onset";
@@ -16,11 +16,11 @@ class OnsetDetectorProcessor extends AudioWorkletProcessor {
   constructor(options: AudioWorkletNodeOptions) {
     super();
     const params = (options.processorOptions ?? {}) as Partial<DetectorParams> & { userSensitivity?: number };
-    this.userSensitivity = params.userSensitivity ?? 1;
-    this.baseMultiplier = params.multiplier ?? 3;
+    this.userSensitivity = params.userSensitivity ?? DEFAULT_DETECTOR_PARAMS.userSensitivity;
+    this.baseMultiplier = params.multiplier ?? DEFAULT_DETECTOR_PARAMS.multiplier;
     this.state = createDetectorState({
       multiplier: this.baseMultiplier / this.userSensitivity,
-      refractoryFrames: params.refractoryFrames ?? 19, // ~50 ms at 48kHz, 128-sample blocks
+      refractoryFrames: params.refractoryFrames ?? DEFAULT_DETECTOR_PARAMS.refractoryFrames, // ~50 ms at 48kHz, 128-sample blocks
     });
 
     this.port.onmessage = (e: MessageEvent) => {
