@@ -13,7 +13,7 @@
 	import { createOnsetDetector } from "../../services/onsetDetector";
 	import type { Verdict, Difficulty } from "../../services/practiceScorer";
 	import { SILENT_STROKES } from "../../services/practiceScorer";
-	import { normalizePracticeSettings } from "../../state/practiceSettings";
+	import { loadPracticeSettings } from "../../state/practiceSettings";
 	import { reactiveLocalStorage } from "../../services/localStorage";
 	import HybridSidebar from "../utils/hybrid-sidebar.vue";
 	import TuneList from "../listen/tune-list.vue";
@@ -80,10 +80,7 @@
 	const headphonesOpen = ref(false);
 
 	const settings = computed({
-		get: () => {
-			const raw = reactiveLocalStorage.bbPracticeSettings;
-			return normalizePracticeSettings(raw ? JSON.parse(raw) : undefined);
-		},
+		get: () => loadPracticeSettings(reactiveLocalStorage.bbPracticeSettings ?? null).settings,
 		set: (s) => { reactiveLocalStorage.bbPracticeSettings = JSON.stringify(s); },
 	});
 
@@ -241,6 +238,9 @@
 	});
 
 	onMounted(() => {
+		const raw = reactiveLocalStorage.bbPracticeSettings ?? null;
+		const { recovered, settings: recoveredSettings } = loadPracticeSettings(raw);
+		if (recovered) reactiveLocalStorage.bbPracticeSettings = JSON.stringify(recoveredSettings);
 		engine.on("verdict", handleVerdict);
 		engine.on("loopWrap", handleLoopWrap);
 	});

@@ -23,3 +23,18 @@ export type PracticeSettingsOptional = z.input<typeof practiceSettingsValidator>
 export function normalizePracticeSettings(data?: PracticeSettingsOptional): PracticeSettings {
   return practiceSettingsValidator.parse(data);
 }
+
+export function loadPracticeSettings(
+  raw: string | null,
+): { settings: PracticeSettings; recovered: boolean } {
+  if (raw == null) return { settings: normalizePracticeSettings(), recovered: false };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { settings: normalizePracticeSettings(), recovered: true };
+  }
+  const result = practiceSettingsValidator.safeParse(parsed);
+  if (result.success) return { settings: result.data, recovered: false };
+  return { settings: normalizePracticeSettings(), recovered: true };
+}

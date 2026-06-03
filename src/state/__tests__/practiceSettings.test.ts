@@ -1,5 +1,38 @@
-import { expect, test } from "vitest";
-import { normalizePracticeSettings } from "../practiceSettings";
+import { describe, expect, it, test } from "vitest";
+import { loadPracticeSettings, normalizePracticeSettings } from "../practiceSettings";
+
+describe("loadPracticeSettings", () => {
+  it("returns defaults and flags recovery on corrupt JSON", () => {
+    const r = loadPracticeSettings("{ not json");
+    expect(r.recovered).toBe(true);
+    expect(r.settings).toEqual(normalizePracticeSettings());
+  });
+
+  it("returns defaults and flags recovery on wrong-type field", () => {
+    // difficulty must be an enum; a number is non-coercible
+    const r = loadPracticeSettings(JSON.stringify({ difficulty: 42 }));
+    expect(r.recovered).toBe(true);
+    expect(r.settings.difficulty).toBe("easy");
+  });
+
+  it("parses a valid blob without flagging recovery", () => {
+    const r = loadPracticeSettings(JSON.stringify({ difficulty: "hard" }));
+    expect(r.recovered).toBe(false);
+    expect(r.settings.difficulty).toBe("hard");
+  });
+
+  it("treats null (absent key) as a clean default, not a recovery", () => {
+    const r = loadPracticeSettings(null);
+    expect(r.recovered).toBe(false);
+    expect(r.settings).toEqual(normalizePracticeSettings());
+  });
+
+  it("returns defaults and flags recovery on a valid JSON non-object", () => {
+    const r = loadPracticeSettings(JSON.stringify("hello"));
+    expect(r.recovered).toBe(true);
+    expect(r.settings).toEqual(normalizePracticeSettings());
+  });
+});
 
 test("normalizePracticeSettings defaults", () => {
   expect(normalizePracticeSettings()).toEqual({
