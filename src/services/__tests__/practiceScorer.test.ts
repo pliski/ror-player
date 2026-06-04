@@ -135,32 +135,6 @@ test("matchHits: extra detection before all expected", () => {
   expect(r.extras).toEqual(d);
 });
 
-test("matchHits: circular — early downbeat wrapping to the loop end matches stroke 0", () => {
-  // A 20ms-early downbeat is converted by the engine to tLoop = loopLen - 20 = 980.
-  // With a circular loop it must match stroke 0 (delta -20), not become a miss + extra.
-  const e = [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }];
-  const d = [{ t: 980, energy: 1 }];
-  const r = matchHits(d, e, 200, DEFAULT_TOLERANCE, 1000);
-  expect(r.matched).toHaveLength(1);
-  expect(r.matched[0].e.strokeIdx).toBe(0);
-  expect(r.matched[0].delta).toBe(-20);
-  expect(r.matched[0].verdict).toBe("good");
-  expect(r.misses).toHaveLength(1);   // stroke 1 (t=500) never hit
-  expect(r.misses[0].strokeIdx).toBe(1);
-  expect(r.extras).toEqual([]);
-});
-
-test("matchHits: circular — a late hit on a stroke near the loop end is NOT stolen by the wrap", () => {
-  // Dense pattern: last stroke at t=875 (loopLen 1000), window 200. A 40ms-late hit at 915 is
-  // nearer the last stroke (40) than the downbeat across the boundary (85) → must stay matched
-  // to the last stroke, not be pulled around to stroke 0.
-  const e = [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 875 }];
-  const d = [{ t: 915, energy: 1 }];
-  const r = matchHits(d, e, 200, DEFAULT_TOLERANCE, 1000);
-  expect(r.matched).toHaveLength(1);
-  expect(r.matched[0].e.t).toBe(875);
-  expect(r.matched[0].delta).toBe(40);
-});
 
 test("scoreSession: empty session", () => {
   const s = scoreSession({ matched: [], misses: [], extras: [] });
@@ -229,6 +203,45 @@ test("createScorer accumulates hits across a single loop", () => {
   const stats = s.stats();
   expect(stats.hits).toBe(2);
   expect(stats.misses).toBe(0);
+});
+
+test("createScorer: an early downbeat in the closing loop is credited to the next loop's stroke 0", () => {
+  // The hit is filed in loop 0's bucket (engine has not wrapped yet) at t≈loopLen-70, i.e. 70 ms
+  // before the NEXT downbeat. After the wrap it must score loop 1's stroke 0 — not a miss + extra.
+  const tl = { expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }], loopLengthMs: 1000, toleranceMs: DEFAULT_TOLERANCE };
+  const s = createScorer(tl);
+  s.acceptHit({ t: 930, energy: 1 }); // 70 ms-early downbeat for loop 1, parked in loop 0's bucket
+  s.onLoopWrap();                      // audio wraps → loop 0 completes, loop 1 in-progress
+  // Lights loop 1's stroke 0 with a negative (early) delta…
+  expect(s.liveVerdicts({ currentLoopElapsedMs: 5 }).perStroke.get(0)).toMatchObject({ delta: -70 });
+  s.finalize();
+  // …and is a HIT with no phantom extra (loop 0's own strokes are misses — nothing was played there).
+  expect(s.stats().hits).toBe(1);
+  expect(s.stats().extras).toBe(0);
+});
+
+test("createScorer: a hit just PAST the boundary (no modulo) is credited to the next stroke 0", () => {
+  const tl = { expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }], loopLengthMs: 1000, toleranceMs: DEFAULT_TOLERANCE };
+  const s = createScorer(tl);
+  s.acceptHit({ t: 1003, energy: 1 }); // 3 ms after the nominal boundary, parked in loop 0's bucket
+  s.onLoopWrap();
+  expect(s.liveVerdicts({ currentLoopElapsedMs: 5 }).perStroke.get(0)).toMatchObject({ delta: 3 });
+  s.finalize();
+  expect(s.stats().hits).toBe(1);
+  expect(s.stats().extras).toBe(0);
+});
+
+test("createScorer: nearest unfilled wins across the boundary (late last-stroke AND early downbeat)", () => {
+  // Last stroke at t=875 (window 200). A 40 ms-late hit (915) is nearer it than the boundary (85 across)
+  // → stays on stroke 7; a 10 ms-early downbeat (990) binds to the next loop's stroke 0. Both are hits.
+  const tl = { expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 7, t: 875 }], loopLengthMs: 1000, toleranceMs: DEFAULT_TOLERANCE };
+  const s = createScorer(tl);
+  s.acceptHit({ t: 915, energy: 1 }); // 40 ms late on the last stroke
+  s.acceptHit({ t: 990, energy: 1 }); // 10 ms-early downbeat for the next loop
+  s.onLoopWrap();
+  s.finalize();
+  expect(s.stats().hits).toBe(2);
+  expect(s.stats().extras).toBe(0);
 });
 
 test("createScorer resets the matcher per loop", () => {
@@ -319,37 +332,19 @@ test("liveVerdicts: signed delta visible through perStroke (late > 0, early < 0,
   expect(scorerLate.liveVerdicts().perStroke.get(0)).toMatchObject({ delta: 15 });
 
   const scorerEarly = createScorer(timeline);
-  scorerEarly.acceptHit({ t: -15 + 500, energy: 0.5 }); // 15ms early → circular delta -15
+  scorerEarly.acceptHit({ t: -15, energy: 0.5 }); // 15 ms early → raw negative tRel, matches stroke 0
   expect(scorerEarly.liveVerdicts().perStroke.get(0)).toMatchObject({ delta: -15 });
 });
 
-test("liveVerdicts: a boundary-crossing early downbeat matches stroke 0 circularly", () => {
-  const timeline = {
-    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }],
-    loopLengthMs: 1000,
-    toleranceMs: DEFAULT_TOLERANCE,
-  };
+test("liveVerdicts: a slightly-early downbeat (raw negative tRel) lights stroke 0", () => {
+  const timeline = { expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }], loopLengthMs: 1000, toleranceMs: DEFAULT_TOLERANCE };
   const s = createScorer(timeline);
-  // Early downbeat parked at the loop end → circular match to stroke 0 with delta -20.
-  s.acceptHit({ t: 980, energy: 1 });
+  s.acceptHit({ t: -20, energy: 1 });  // 20 ms before this loop's downbeat
   expect(s.liveVerdicts().perStroke.get(0)).toMatchObject({ verdict: "good", delta: -20 });
-  // A normal in-loop hit on stroke 1.
-  s.acceptHit({ t: 510, energy: 1 });
+  s.acceptHit({ t: 510, energy: 1 });  // a normal in-loop hit on stroke 1
   expect(s.liveVerdicts().perStroke.get(1)).toMatchObject({ verdict: "good", delta: 10 });
 });
 
-test("liveVerdicts: a slightly-early downbeat (wrapped to the loop end) lights up stroke 0", () => {
-  // The engine converts a 20ms-early downbeat to tLoop = loopLen - 20; liveVerdicts must
-  // attribute it to stroke 0 via circular matching.
-  const timeline = {
-    expected: [{ strokeIdx: 0, t: 0 }, { strokeIdx: 1, t: 500 }],
-    loopLengthMs: 1000,
-    toleranceMs: DEFAULT_TOLERANCE,
-  };
-  const s = createScorer(timeline);
-  s.acceptHit({ t: 980, energy: 1 });
-  expect(s.liveVerdicts().perStroke.get(0)).toMatchObject({ verdict: "good", delta: -20 });
-});
 
 test("deltaToPosition: centre, zone boundary, edges, clamp, direction", () => {
   // on-time → centre, good zone

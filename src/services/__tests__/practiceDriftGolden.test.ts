@@ -7,8 +7,8 @@ import type { BeatboxReference } from "../player";
 
 // Golden end-to-end timing test. We synthesize the exact onset stream a perfect
 // (or deliberately imperfect) player would produce for a known partition, feed it
-// through the REAL engine timing path (perf-time → loop-relative → modulo, plus
-// the latencyOffsetMs correction), and assert what avg|Δ| and drift come out.
+// through the REAL engine timing path (perf-time → loop-relative, plus the
+// latencyOffsetMs correction), and assert what avg|Δ| and drift come out.
 //
 // This is the oracle for "is the app counting the right latency?". The engine
 // inverts time:  tRel = (t_perf - latencyOffsetMs) - baseline.  synthesizeOnsets

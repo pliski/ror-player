@@ -465,8 +465,8 @@ test("verdicts(): an early downbeat matches stroke 0 across the wrap", async () 
   engine.configure({ pattern, instrument: "sn", speedBpm: 120, mode: "instrument" });
   await engine.start();
   await engine.advanceToGameOn(1000);
-  onsetSub!({ t_perf: 1000 - 20, energy: 0.5 }); // 20ms before downbeat → circular match to stroke 0
-  expect(engine.verdicts().perStroke.get(0)?.verdict).toBe("good");
+  onsetSub!({ t_perf: 1000 - 20, energy: 0.5 }); // 20ms early → raw tRel −20, matches stroke 0 (no modulo)
+  expect(engine.verdicts().perStroke.get(0)).toMatchObject({ verdict: "good", delta: -20 });
 });
 
 test("verdictsChanged fires on each onset", async () => {

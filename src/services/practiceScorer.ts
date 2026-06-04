@@ -16,7 +16,8 @@ export interface ExpectedTimeline {
 }
 
 export interface DetectedHit {
-  /** ms loop-relative, after latency offset applied by the engine */
+  /** ms from the loop baseline, after the latency offset — raw and signed: negative for a hit a
+   *  hair before the downbeat (early), or > loopLen for one just past the boundary before the wrap. */
   t: number;
   energy: number;
 }
@@ -128,45 +129,13 @@ function classifyDelta(delta: number, tolerance: { good: number; off: number }):
   return Math.abs(delta) <= tolerance.good ? "good" : "off";
 }
 
-/**
- * Signed shortest-path delta between a hit and an expected stroke on the loop *circle*
- * (+ = late, − = early), in the range (−loopLen/2, loopLen/2]. Loop time wraps at the
- * downbeat (0 ≡ loopLen), so a hit a hair *before* the downbeat arrives as ≈loopLen after
- * the engine's modulo; this folds it back to a small negative instead of a near-full-loop gap.
- */
-function circularDelta(hitT: number, expT: number, loopLen: number): number {
-  const d = (((hitT - expT) % loopLen) + loopLen) % loopLen; // [0, loopLen)
-  return d > loopLen / 2 ? d - loopLen : d;
-}
-
 export function matchHits(
   detected: DetectedHit[],
   expected: ExpectedHit[],
   windowMs: number,
   tolerance: { good: number; off: number } = DEFAULT_TOLERANCE,
-  loopLengthMs?: number,
 ): MatchResult {
-  // When the loop length is known, treat time as circular: a hit whose shortest path to its
-  // nearest expected wraps across the downbeat boundary is "unwrapped" (shifted by ±loopLen)
-  // so the linear walking-pointer below sees it sitting beside that expected. This rescues
-  // slightly-early downbeats, which the engine's modulo lands at ≈loopLen.
-  if (loopLengthMs !== undefined && expected.length > 0) {
-    detected = detected
-      .map((d) => {
-        let nearest = expected[0];
-        let bestAbs = Infinity;
-        for (const e of expected) {
-          const abs = Math.abs(circularDelta(d.t, e.t, loopLengthMs));
-          if (abs < bestAbs) { bestAbs = abs; nearest = e; }
-        }
-        return Math.abs(d.t - nearest.t) > loopLengthMs / 2
-          ? { ...d, t: nearest.t + circularDelta(d.t, nearest.t, loopLengthMs) }
-          : d;
-      })
-      .sort((a, b) => a.t - b.t);
-  }
-
-  // Walking-pointer greedy nearest-neighbour. Both arrays MUST be time-sorted.
+  // Walking-pointer greedy nearest-neighbour. Both arrays MUST be time-sorted by the caller.
   const matched: MatchResult["matched"] = [];
   const misses: ExpectedHit[] = [];
   const extras: DetectedHit[] = [];
@@ -180,19 +149,15 @@ export function matchHits(
     const delta = d.t - e.t;
 
     if (delta < -windowMs) {
-      // Detected is too far before expected — it's an extra
-      extras.push(d);
+      extras.push(d); // detected too far before expected
       di++;
     } else if (delta > windowMs) {
-      // Expected is too far before detected — it's a miss
-      misses.push(e);
+      misses.push(e); // expected too far before detected
       ei++;
     } else {
-      // Within window. Greedy: check if the NEXT detected is closer to this expected.
       const dNext = detected[di + 1];
       if (dNext && Math.abs(dNext.t - e.t) < Math.abs(delta) && Math.abs(dNext.t - e.t) <= windowMs) {
-        // Current d is a strictly worse match — it's an extra; advance.
-        extras.push(d);
+        extras.push(d); // a strictly closer detected follows → this one is an extra
         di++;
       } else {
         matched.push({ d, e, delta, verdict: classifyDelta(delta, tolerance) });
@@ -202,7 +167,6 @@ export function matchHits(
     }
   }
 
-  // Drain remainders
   while (ei < expected.length) misses.push(expected[ei++]);
   while (di < detected.length) extras.push(detected[di++]);
 
@@ -255,67 +219,81 @@ export interface ScorerHandle {
   liveVerdicts(opts?: { currentLoopElapsedMs?: number | null }): LiveVerdicts;
 }
 
+interface UnrolledExpected extends ExpectedHit { loopIdx: number; }
+interface UnrolledDetected extends DetectedHit { loopIdx: number; }
+
 export function createScorer(timeline: ExpectedTimeline): ScorerHandle {
-  // Per-loop pending matchers. We don't run matchHits() incrementally; instead we
-  // bucket detected hits per-loop and run matchHits() at finalize(). For *live*
-  // verdict emission we eagerly classify each hit against the nearest expected
-  // (best-effort; final score uses the canonical matchHits at finalize time).
   let currentLoopDetected: DetectedHit[] = [];
   const completedLoops: DetectedHit[][] = [];
   let finalized = false;
   let finalMatch: MatchResult = { matched: [], misses: [], extras: [] };
   const windowMs = timeline.toleranceMs.off + 50;
+  const loopLen = timeline.loopLengthMs;
 
-  // Single source of truth for turning the bucketed detections into a MatchResult — shared by
-  // live stats() and finalize(), so the totals can never disagree between the two. COMPLETED
-  // loops are always scored in full: every loop the metronome finished is fully judged ("keep
-  // counting every loop"). The IN-PROGRESS loop always matches against the full timeline (so a
-  // just-landed on-time hit binds to its stroke immediately instead of flickering as an "extra"
-  // until its window closes), but a stroke only becomes a MISS once its window has closed by
-  // `currentMissCutoffMs`; strokes the metronome has not yet reached are never misses. Pass
-  // Infinity to judge the whole in-progress loop.
-  function buildSessionMatch(currentMissCutoffMs: number): MatchResult {
-    const merged: MatchResult = { matched: [], misses: [], extras: [] };
-    for (const loopDet of completedLoops) {
-      const r = matchHits(loopDet, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-      merged.matched.push(...r.matched);
-      merged.misses.push(...r.misses);
-      merged.extras.push(...r.extras);
+  // Match EVERY loop on one monotonic timeline (loop k at [k·loopLen, (k+1)·loopLen)). This lets a
+  // near-boundary hit bind to the NEXT loop's stroke 0 — a per-loop matcher could never reach it,
+  // because the hit and the stroke it should satisfy sit in different loops. loopIdx is carried on
+  // each unrolled hit (not recomputed by division) so float error can't misattribute a boundary.
+  function rawUnrolledMatch() {
+    const L = completedLoops.length; // index of the in-progress loop
+    const detected: UnrolledDetected[] = [];
+    completedLoops.forEach((bucket, k) => {
+      for (const d of bucket) detected.push({ ...d, t: d.t + k * loopLen, loopIdx: k });
+    });
+    for (const d of currentLoopDetected) detected.push({ ...d, t: d.t + L * loopLen, loopIdx: L });
+    detected.sort((a, b) => a.t - b.t);
+
+    const expected: UnrolledExpected[] = [];
+    for (let k = 0; k <= L; k++) {
+      for (const e of timeline.expected) expected.push({ strokeIdx: e.strokeIdx, t: e.t + k * loopLen, loopIdx: k });
     }
-    const rCur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
-    merged.matched.push(...rCur.matched);
-    merged.extras.push(...rCur.extras);
-    merged.misses.push(...rCur.misses.filter((e) => e.t <= currentMissCutoffMs));
-    return merged;
+    // matchHits returns the same object references it was given, so loopIdx survives the round-trip.
+    return matchHits(detected, expected, windowMs, timeline.toleranceMs) as unknown as {
+      matched: Array<{ d: UnrolledDetected; e: UnrolledExpected; delta: number; verdict: "good" | "off" }>;
+      misses: UnrolledExpected[];
+      extras: UnrolledDetected[];
+    };
+  }
+
+  // Turn the unrolled match into the scored MatchResult. COMPLETED loops are scored in full; the
+  // IN-PROGRESS loop (loopIdx === L) only books a MISS once the stroke's window has closed by
+  // currentMissCutoffMs. Pass Infinity to judge the whole in-progress loop. scoreSession reads only
+  // counts + delta, so the unrolled times in the returned result are immaterial to the score.
+  function buildSessionMatch(currentMissCutoffMs: number): MatchResult {
+    const L = completedLoops.length;
+    const r = rawUnrolledMatch();
+    const misses = r.misses.filter((e) => e.loopIdx < L || (e.t - L * loopLen) <= currentMissCutoffMs);
+    return { matched: r.matched, misses, extras: r.extras };
   }
 
   const RECENT_TRAIL = 5;
 
   function liveVerdicts(opts?: { currentLoopElapsedMs?: number | null }): LiveVerdicts {
-    // A miss only lights once its window has PROVABLY closed. finalize() judges the whole loop
-    // (Infinity); while playing we derive the cutoff from elapsed; but with no elapsed yet (e.g.
-    // before gameOn anchors the loop baseline) we cannot know what has closed, so show NO misses
-    // (−Infinity) rather than flashing every unplayed stroke as missed.
+    const L = completedLoops.length;
+    // A miss only lights once its window has PROVABLY closed; with no elapsed yet (before gameOn
+    // anchors the baseline) we cannot know what has closed, so show NO misses (−Infinity).
     const cutoff = finalized
       ? Infinity
       : (opts?.currentLoopElapsedMs == null ? -Infinity : opts.currentLoopElapsedMs - windowMs);
-    // Current in-progress loop only — the partition shows the loop being played; it clears when
-    // currentLoopDetected resets at the wrap. (After finalize this shows the last loop in full;
-    // the finalize() tail-trim that gates the COUNTS is not applied to the highlight — results-
-    // state polish is downstream in 2.3/2.4.)
-    const cur = matchHits(currentLoopDetected, timeline.expected, windowMs, timeline.toleranceMs, timeline.loopLengthMs);
+    const full = rawUnrolledMatch();
     const perStroke = new Map<number, { verdict: "good" | "off" | "miss"; delta: number | null }>();
-    for (const m of cur.matched) perStroke.set(m.e.strokeIdx, { verdict: m.verdict, delta: m.delta });
-    for (const e of cur.misses) {
-      if (e.t <= cutoff && !perStroke.has(e.strokeIdx)) perStroke.set(e.strokeIdx, { verdict: "miss", delta: null });
+    // In-progress loop only — the partition shows the loop being played. A hit from the just-closed
+    // loop that binds forward to this loop's stroke 0 (the early downbeat) lights it here.
+    for (const m of full.matched) {
+      if (m.e.loopIdx === L) perStroke.set(m.e.strokeIdx, { verdict: m.verdict, delta: m.delta });
     }
-    // Rolling meter trail: last N matched across all loops (completed are fixed; current can
-    // reassign). Ordered by loop then within-loop stroke order, not strictly by hit-arrival time.
-    // (buildSessionMatch re-matches the current loop a second time here — deterministic and cheap at
-    // real session lengths, so accepted rather than threading `cur` through buildSessionMatch.)
-    const all = buildSessionMatch(Infinity).matched;
-    const recent = all.slice(-RECENT_TRAIL).map((m) => ({ delta: m.delta, verdict: m.verdict }));
-    return { perStroke, extras: cur.extras, recent };
+    for (const e of full.misses) {
+      if (e.loopIdx === L && (e.t - L * loopLen) <= cutoff && !perStroke.has(e.strokeIdx)) {
+        perStroke.set(e.strokeIdx, { verdict: "miss", delta: null });
+      }
+    }
+    // Extras of the in-progress loop, mapped back to in-loop time so extraStrokeIdx tints the right cell.
+    const extras = full.extras
+      .filter((d) => d.loopIdx === L)
+      .map((d) => ({ t: d.t - L * loopLen, energy: d.energy }));
+    // Rolling meter trail: last N matched across all loops, ordered by loop then stroke.
+    const recent = full.matched.slice(-RECENT_TRAIL).map((m) => ({ delta: m.delta, verdict: m.verdict }));
+    return { perStroke, extras, recent };
   }
 
   return {

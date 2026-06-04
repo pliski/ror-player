@@ -133,12 +133,12 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
 
     onsetHandler = (e: { t_perf: number; energy: number }) => {
       if (state.value !== "gameOn" || loopBaselinePerf === null || !scorer) return;
-      // Translate perf-time → loop-relative
+      // Raw monotonic loop-relative time — NO modulo. Folding into [0, loopLen) would pin a hit played
+      // just before the next downbeat to the CLOSING loop; the scorer's unrolled matcher needs the
+      // true offset to credit it to the next loop's stroke 0 (the early-downbeat case). A hit slightly
+      // before the baseline is correctly negative (early); one just past the boundary stays > loopLen.
       const tRel = (e.t_perf - (opts.latencyOffsetMs ?? 0)) - loopBaselinePerf;
-      const loopLen = timeline.loopLengthMs;
-      // Always-positive modulo (handles hits arriving before baseline)
-      const tLoop = ((tRel % loopLen) + loopLen) % loopLen;
-      scorer.acceptHit({ t: tLoop, energy: e.energy });
+      scorer.acceptHit({ t: tRel, energy: e.energy });
       events.emit("verdictsChanged", {});
     };
     deps.detector.on("onset", onsetHandler);
