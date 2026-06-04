@@ -37,7 +37,9 @@ export interface PracticeEngineOpts {
   timer?: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout };
   finaliseDelayMs?: number;
   beatboxFactory?: (repeat: boolean) => { ref: BeatboxReference; player: Beatbox };
-  latencyOffsetMs?: number;
+  /** Latency offset in ms. A function is re-read on every onset, so a slider/calibration change
+   *  takes effect live (parity with detector.setSensitivity). A bare number is captured once. */
+  latencyOffsetMs?: number | (() => number);
   /** Injectable monotonic clock (ms). Defaults to performance.now(). Lets tests drive
    *  loop-elapsed deterministically — notably the time-based loop-wrap detection. */
   now?: () => number;
@@ -89,6 +91,8 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
     clearTimeout: (id: number) => window.clearTimeout(id),
   };
   const now = opts.now ?? (() => performance.now());
+  const resolveLatency = () =>
+    typeof opts.latencyOffsetMs === "function" ? opts.latencyOffsetMs() : (opts.latencyOffsetMs ?? 0);
   const events: Emitter<PracticeEngineEvents> = mitt();
   let activeStream: MediaStream | null = null;
 
@@ -137,7 +141,7 @@ export function createPracticeEngine(deps: PracticeEngineDeps, opts: PracticeEng
       // just before the next downbeat to the CLOSING loop; the scorer's unrolled matcher needs the
       // true offset to credit it to the next loop's stroke 0 (the early-downbeat case). A hit slightly
       // before the baseline is correctly negative (early); one just past the boundary stays > loopLen.
-      const tRel = (e.t_perf - (opts.latencyOffsetMs ?? 0)) - loopBaselinePerf;
+      const tRel = (e.t_perf - resolveLatency()) - loopBaselinePerf;
       scorer.acceptHit({ t: tRel, energy: e.energy });
       events.emit("verdictsChanged", {});
     };

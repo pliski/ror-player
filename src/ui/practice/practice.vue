@@ -96,7 +96,7 @@
 
 	const micPermission = createMicPermission();
 	const detector = createOnsetDetector();
-	const engine = createPracticeEngine({ micPermission, detector });
+	const engine = createPracticeEngine({ micPermission, detector }, { latencyOffsetMs: () => latencyMs.value });
 
 	const practiceState = computed(() => engine.state.value);
 

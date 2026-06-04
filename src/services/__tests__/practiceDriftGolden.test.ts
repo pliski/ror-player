@@ -148,6 +148,15 @@ test("calibrating latencyOffsetMs to the real latency cancels the drift", async 
   expect(stats.meanAbsDelta).toBe(0);
 });
 
+test("latencyOffsetMs as a live getter cancels the drift just like a static number", async () => {
+  const config = makeConfig(["X", ".", "X", "."]);
+  const { expected } = buildExpectedTimeline(config.pattern, "sn", 120);
+  const feed = synthesizeOnsets(expected, BASELINE, 40, () => 0);
+  const stats = await runSession(config, feed, { latencyOffsetMs: () => 40 }); // function form
+  expect(stats.drift).toBe(0);
+  expect(stats.meanAbsDelta).toBe(0);
+});
+
 test("random sloppiness inflates avg|Δ| but leaves drift ≈ 0", async () => {
   // Strokes at 125 ms and 375 ms (kept away from the loop edges so the ±20 ms
   // jitter can't wrap across the loop boundary). Early and late cancel in drift.
